@@ -1,0 +1,14 @@
+chromadb
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+ollama
+sentence-transformers
+torch
+fastapi
+uvicorn
+pydantic 
+requests>=2.31.0
+tqdm>=4.66.1 
+pymupdf
