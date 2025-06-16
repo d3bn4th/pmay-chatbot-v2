@@ -66,7 +66,7 @@ def re_rank_cross_encoders(documents: List[str], prompt: str) -> Tuple[str, List
             return documents[0], [0]
         return "", []
 
-def call_llm(context: str, prompt: str, system_prompt: str) -> str:
+def call_llm(context: str, prompt: str, system_prompt: str):
     """Call the LLM with the given context and prompt."""
     try:
         # Ensure context is a string
@@ -76,7 +76,7 @@ def call_llm(context: str, prompt: str, system_prompt: str) -> str:
             context = str(context)
 
         # Create the full prompt with specific formatting instructions
-        full_prompt = f"""{system_prompt}
+        full_prompt_for_llm = f"""{system_prompt}
 
 Context: {context}
 
@@ -91,8 +91,8 @@ Assistant: Please provide a clear and concise response. Use only these formattin
 
 Response:"""
         
-        # Call the LLM
-        response = ollama.chat(
+        # Call the LLM with streaming enabled
+        stream_response = ollama.chat(
             model="llama3.2:3b",
             messages=[
                 {
@@ -107,44 +107,17 @@ Response:"""
             options={
                 "num_gpu": 1,
                 "num_thread": 4,
-                "max_tokens": 1000
+                "max_tokens": 1000,
+                "stream": True # This is crucial for streaming
             }
         )
         
-        # Debug print
-        print("Response type:", type(response))
-        print("Response message:", response.message)
-        
-        # Extract the content from the response
-        if hasattr(response, 'message') and hasattr(response.message, 'content'):
-            content = response.message.content
-            
-            # Clean up the response to ensure it's markdown-safe
-            # Remove any complex markdown features
-            content = content.replace('```', '')  # Remove code blocks
-            content = content.replace('~~~', '')  # Remove alternative code blocks
-            content = content.replace('|', '-')   # Replace tables with dashes
-            content = content.replace('`', '')    # Remove inline code
-            
-            # Convert numbered lists to bullet points
-            import re
-            content = re.sub(r'^\d+\.\s+', '- ', content, flags=re.MULTILINE)
-            
-            # Ensure proper spacing for bullet points
-            content = content.replace('\n-', '\n\n-')  # Add space before bullet points
-            content = content.replace('\n*', '\n\n*')  # Add space before asterisk lists
-            
-            # Remove any remaining numbered lists
-            content = re.sub(r'\n\d+\.\s+', '\n\n- ', content)
-            
-            # Ensure double newlines between paragraphs
-            content = re.sub(r'\n\n+', '\n\n', content)
-            
-            return content.strip()
-        else:
-            print("Unexpected response format:", response)
-            return "I apologize, but I encountered an error while processing your request. Please try again."
-        
+        # Iterate over the streamed chunks and yield the content directly
+        for chunk in stream_response:
+            if hasattr(chunk, 'message') and hasattr(chunk.message, 'content'):
+                yield chunk.message.content # Yield the raw content chunk directly
+
     except Exception as e:
         print(f"Error in call_llm: {str(e)}")
-        raise Exception(f"Error generating response: {str(e)}") 
+        # In a streaming scenario, yield an error message
+        yield f"I apologize, but I encountered an error while processing your request: {str(e)}" 

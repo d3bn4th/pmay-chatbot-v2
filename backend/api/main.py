@@ -56,9 +56,9 @@ async def chat(request: Request):
             try:
                 user_input_lower = chat_request.message.lower()
                 if user_input_lower in GREETING_RESPONSES:
-                    response_content = GREETING_RESPONSES[user_input_lower]
-                    yield f"{response_content}\n"
-                    print(f"Yielding: {response_content}\n")
+                    # Send greeting in SSE format
+                    yield f"data: {json.dumps({'content': GREETING_RESPONSES[user_input_lower]})}\n\n"
+                    print(f"Yielding greeting: {GREETING_RESPONSES[user_input_lower]}")
                     return
 
                 # Get documents from vector store
@@ -70,8 +70,9 @@ async def chat(request: Request):
                 
                 if not documents:
                     no_info_response = "I apologize, but I couldn't find specific information about that in my knowledge base. Could you please rephrase your question or ask about a different aspect of PMAY?"
-                    yield f"{no_info_response}\n"
-                    print(f"Yielding: {no_info_response}\n")
+                    # Send no info response in SSE format
+                    yield f"data: {json.dumps({'content': no_info_response})}\n\n"
+                    print(f"Yielding no info: {no_info_response}")
                     return
 
                 # Get reranked documents and their indices
@@ -87,39 +88,48 @@ async def chat(request: Request):
                 
                 if not relevant_text:
                     no_info_response = "I apologize, but I couldn't find specific information about that in my knowledge base. Could you please rephrase your question or ask about a different aspect of PMAY?"
-                    yield f"{no_info_response}\n"
-                    print(f"Yielding: {no_info_response}\n")
+                    # Send no relevant text response in SSE format
+                    yield f"data: {json.dumps({'content': no_info_response})}\n\n"
+                    print(f"Yielding no relevant text: {no_info_response}")
                     return
 
                 # Generate response using the LLM
                 try:
-                    full_response = call_llm(
+                    # Iterate over the streamed chunks from call_llm
+                    for chunk in call_llm(
                         context=relevant_text,
                         prompt=chat_request.message,
                         system_prompt=SYSTEM_PROMPT
-                    )
+                    ):
+                        # Yield each chunk in Server-Sent Events (SSE) format
+                        yield f"data: {json.dumps({'content': chunk})}\n\n"
+                        print(f"Yielding chunk from LLM: {chunk}")
                     
-                    # Append sources to the full response
+                    # After the LLM response is complete, append sources if any
                     if relevant_text_ids:
-                        full_response += "\n\n**Sources:**\n"
+                        sources_text = "\n\n**Sources:**\n"
                         for doc_id in relevant_text_ids:
                             if isinstance(doc_id, int) and doc_id < len(documents):
                                 source_title = documents[doc_id][:100] + "..." if len(documents[doc_id]) > 100 else documents[doc_id]
-                                full_response += f"- [{source_title}](#{doc_id})\n"
-                    
-                    yield f"{full_response}\n"
-                    print(f"Yielding: {full_response}\n")
+                                sources_text += f"- [{source_title}](#{doc_id})\n"
+                        
+                        # Send sources as a final chunk in SSE format
+                        yield f"data: {json.dumps({'content': sources_text})}\n\n"
+                        print(f"Yielding sources: {sources_text}")
+
                 except Exception as e:
                     print(f"Error in LLM call: {str(e)}")
                     error_message = "I apologize, but I encountered an error while processing your request. Please try again."
-                    yield f"{error_message}\n"
-                    print(f"Yielding: {error_message}\n")
+                    # Send error message in SSE format
+                    yield f"data: {json.dumps({'content': error_message})}\n\n"
+                    print(f"Yielding LLM error: {error_message}")
 
             except Exception as e:
                 print(f"Error in chat endpoint (generate_response): {str(e)}")
                 error_message = f"Error: {str(e)}"
-                yield f"{error_message}\n"
-                print(f"Yielding: {error_message}\n")
+                # Send general error message in SSE format
+                yield f"data: {json.dumps({'content': error_message})}\n\n"
+                print(f"Yielding general error: {error_message}")
 
         return StreamingResponse(generate_response(), media_type="text/event-stream")
     except Exception as e:

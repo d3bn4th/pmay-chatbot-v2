@@ -1,7 +1,6 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import { useChat } from "ai/react"
 import MarkdownIt from "markdown-it"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -12,8 +11,13 @@ import { Loader2, Send, Info, Home, FileText, Settings, UserCircle2, Menu } from
 import Image from "next/image"
 import { SourceDocuments } from "@/components/source-documents"
 import { useMobile } from "@/hooks/use-mobile"
+import { type CoreMessage } from 'ai'
 
-const md = new MarkdownIt()
+const md = new MarkdownIt({
+  html: false,
+  breaks: true,
+  linkify: true
+})
 
 // Sample source documents for demonstration
 const sampleSourceDocs = [
@@ -32,11 +36,13 @@ const sampleSourceDocs = [
 ]
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    streamProtocol: 'text',
-  })
+  const [messages, setMessages] = useState<CoreMessage[]>([])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = useRef<HTMLHTMLDivElement>(null)
   const isMobile = useMobile()
   const [showSidebar, setShowSidebar] = useState(!isMobile)
   const [activeSection, setActiveSection] = useState("home")
@@ -59,13 +65,117 @@ export default function ChatPage() {
 
   const showWelcomeMessage = messages.length === 0 && !isLoading && !error
 
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
+
+    const userMessage: CoreMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+    }
+
+    setMessages((prevMessages) => [...prevMessages, userMessage])
+    setInput('')
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: [userMessage] }), // Send only the last user message
+      })
+
+      if (!response.ok || !response.body) {
+        const errorText = await response.text()
+        throw new Error(`API request failed with status ${response.status}: ${errorText}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let assistantResponseContent = ''
+      let isFirstChunk = true
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        // Split chunk by 'data: ' to handle multiple SSE messages in one chunk
+        const sseMessages = chunk.split('\n\n').filter(msg => msg.startsWith('data: ')).map(msg => msg.substring(6))
+
+        for (const sseMessage of sseMessages) {
+          try {
+            const parsedData = JSON.parse(sseMessage)
+            const content = parsedData.content
+
+            if (content) {
+              assistantResponseContent += content
+              setMessages((prevMessages) => {
+                if (isFirstChunk) {
+                  isFirstChunk = false
+                  return [
+                    ...prevMessages,
+                    {
+                      id: 'ai-response', // Assign a consistent ID for the AI response being streamed
+                      role: 'assistant',
+                      content: assistantResponseContent,
+                    },
+                  ]
+                } else {
+                  // Update the last message's content
+                  const lastMessage = prevMessages[prevMessages.length - 1]
+                  if (lastMessage && lastMessage.id === 'ai-response') {
+                    return prevMessages.map((msg, index) =>
+                      index === prevMessages.length - 1
+                        ? { ...msg, content: assistantResponseContent }
+                        : msg
+                    )
+                  } else {
+                    // This case should ideally not happen if logic is correct, but as a fallback
+                    return [
+                      ...prevMessages,
+                      {
+                        id: 'ai-response',
+                        role: 'assistant',
+                        content: assistantResponseContent,
+                      }
+                    ]
+                  }
+                }
+              })
+            }
+          } catch (jsonError) {
+            console.error('Failed to parse SSE message:', sseMessage, jsonError)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error during streaming:', err)
+      setError(err instanceof Error ? err : new Error('An unknown error occurred.'))
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: 'I apologize, but I encountered an error while processing your request. Please try again.',
+        },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
       <div
-        className={`${
+        className={`fixed top-0 left-0 h-screen z-50 ${
           showSidebar ? "w-64" : "w-0 -ml-64"
-        } bg-blue-800 text-white transition-all duration-300 ease-in-out flex-shrink-0 overflow-hidden`}
+        } bg-blue-800 text-white transition-all duration-300 ease-in-out overflow-hidden`}
       >
         <div className="p-4 h-full flex flex-col">
           <div className="flex flex-col items-center justify-center mb-8">
@@ -145,7 +255,7 @@ export default function ChatPage() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${showSidebar ? "ml-64" : "ml-0"}`}>
         {/* Header */}
         <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
           <Button variant="ghost" size="sm" onClick={() => setShowSidebar(!showSidebar)} className="md:hidden">
@@ -279,7 +389,7 @@ export default function ChatPage() {
                 <Input
                   placeholder="Ask about PMAY scheme..."
                   value={input}
-                  onChange={handleInputChange}
+                  onChange={(e) => setInput(e.target.value)}
                   className="flex-1 bg-white border-gray-300 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 text-gray-900 placeholder:text-gray-500 rounded-lg py-3 px-4"
                   disabled={isLoading}
                   aria-label="Chat input"

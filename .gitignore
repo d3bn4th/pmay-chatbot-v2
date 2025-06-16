@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large model files
+backend/models/cross-encoder_ms-marco-MiniLM-L-6-v2/model.safetensors
+
+# Node modules
+frontend/node_modules/
