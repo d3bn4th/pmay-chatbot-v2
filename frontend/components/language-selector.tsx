@@ -23,20 +23,20 @@ interface LanguageSelectorProps {
 export function LanguageSelector({ selectedLanguage, onLanguageChange }: LanguageSelectorProps) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center text-sm font-medium text-white">
+      <div className="flex items-center text-sm sm:text-base font-medium text-white">
         <Languages className="mr-2 h-4 w-4" />
         Language
       </div>
       <Select value={selectedLanguage} onValueChange={onLanguageChange}>
-        <SelectTrigger className="w-full bg-blue-700 border-blue-600 text-white hover:bg-blue-600">
+        <SelectTrigger className="w-full bg-blue-700 border-blue-600 text-white hover:bg-blue-600 text-sm sm:text-base">
           <SelectValue placeholder="Select language" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="max-h-[300px] sm:max-h-[400px]">
           {languages.map((lang) => (
-            <SelectItem key={lang.code} value={lang.code}>
-              <div className="flex items-center justify-between w-full">
-                <span>{lang.name}</span>
-                <span className="text-sm text-gray-500 ml-2">{lang.nativeName}</span>
+            <SelectItem key={lang.code} value={lang.code} className="py-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-1 sm:gap-0">
+                <span className="text-sm sm:text-base">{lang.name}</span>
+                <span className="text-xs sm:text-sm text-gray-500">{lang.nativeName}</span>
               </div>
             </SelectItem>
           ))}

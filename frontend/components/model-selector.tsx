@@ -18,20 +18,20 @@ interface ModelSelectorProps {
 export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorProps) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center text-sm font-medium text-white">
+      <div className="flex items-center text-sm sm:text-base font-medium text-white">
         <Cpu className="mr-2 h-4 w-4" />
         AI Model
       </div>
       <Select value={selectedModel} onValueChange={onModelChange}>
-        <SelectTrigger className="w-full bg-blue-700 border-blue-600 text-white hover:bg-blue-600">
+        <SelectTrigger className="w-full bg-blue-700 border-blue-600 text-white hover:bg-blue-600 text-sm sm:text-base">
           <SelectValue placeholder="Select model" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="max-h-[300px] sm:max-h-[400px]">
           {models.map((model) => (
-            <SelectItem key={model.id} value={model.id}>
+            <SelectItem key={model.id} value={model.id} className="py-2">
               <div className="flex flex-col items-start">
-                <span className="font-medium">{model.name}</span>
-                <span className="text-xs text-gray-500">{model.description}</span>
+                <span className="font-medium text-sm sm:text-base">{model.name}</span>
+                <span className="text-xs sm:text-sm text-gray-500">{model.description}</span>
               </div>
             </SelectItem>
           ))}

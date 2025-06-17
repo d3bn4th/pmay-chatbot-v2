@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { Loader2, Send, Info, Home, FileText, Settings, Menu } from "lucide-react"
+import { Loader2, Send, Info, Home, FileText, Settings, Menu, ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { SourceDocument, SourceDocuments } from "@/components/source-documents"
 import { useMobile } from "@/hooks/use-mobile"
@@ -19,11 +19,23 @@ interface ChatMessageType {
   sources?: SourceDocument[];
 }
 
+// Thinking dots animation component
+const ThinkingDots = () => {
+  return (
+    <div className="flex space-x-1 items-center">
+      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+    </div>
+  );
+};
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [isAssistantStreaming, setIsAssistantStreaming] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isMobile = useMobile()
@@ -106,6 +118,9 @@ export default function ChatPage() {
               const content = parsedData.content;
               if (content) {
                 assistantResponseContent += content;
+                if (!isAssistantStreaming) {
+                  setIsAssistantStreaming(true);
+                }
               }
             } else if (parsedData.type === 'sources') {
               if (parsedData.sources) {
@@ -156,6 +171,7 @@ export default function ChatPage() {
       ])
     } finally {
       setIsLoading(false)
+      setIsAssistantStreaming(false);
     }
   }
 
@@ -165,31 +181,22 @@ export default function ChatPage() {
       <div
         className={`fixed top-0 left-0 h-screen z-50 ${
           showSidebar ? "w-64" : "w-0 -ml-64"
-        } bg-blue-800 text-white transition-all duration-300 ease-in-out overflow-hidden`}
+        } bg-blue-800 text-white transition-all duration-300 ease-in-out overflow-hidden
+        ${isMobile ? "shadow-xl" : ""}`}
       >
         <div className="p-4 h-full flex flex-col">
-          <div className="flex flex-col items-center justify-center mb-8">
-            <div className="flex items-center mb-2">
-              <div className="bg-white p-2 rounded-xl mr-2">
-                <Image
-                  src="/mohua-logo-removebgpng.png"
-                  alt="Government of India Emblem"
-                  width={60}
-                  height={60}
-                  className="object-contain"
-                />
-              </div>
-              <div className="bg-white p-2 rounded-xl">
-                <Image
-                  src="/pmay-logo-removebg-preview.png"
-                  alt="PMAY Logo"
-                  width={80}
-                  height={80}
-                  className="object-contain"
-                />
-              </div>
-            </div>
+          <div className="flex items-center justify-between mb-8">
             <h1 className="text-lg font-bold">PMAY Chatbot</h1>
+            {isMobile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-white hover:bg-blue-700"
+                onClick={() => setShowSidebar(false)}
+              >
+                <ArrowLeft className="h-6 w-6" />
+              </Button>
+            )}
           </div>
 
           <nav className="space-y-1 mb-6">
@@ -245,14 +252,45 @@ export default function ChatPage() {
       </div>
 
       {/* Main Content */}
-      <div className={`flex-1 flex flex-col h-full ${showSidebar ? "ml-64" : "ml-0"}`}>
+      <div className={`flex-1 flex flex-col h-full ${!isMobile && showSidebar ? "ml-64" : "ml-0"}`}>
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => setShowSidebar(!showSidebar)} className="md:hidden">
-            <Menu className="h-5 w-5" />
+        <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm shrink-0 relative h-20">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="lg:hidden"
+            onClick={() => setShowSidebar(!showSidebar)}
+          >
+            <Menu className="h-6 w-6" />
           </Button>
-          
-          <div className="w-8"></div>
+
+          <div className={`absolute left-1/2 -translate-x-1/2 flex items-center space-x-4 transition-opacity duration-500 ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`}>
+            <Image
+              src="/mohua-logo-removebgpng.png"
+              alt="MoHUA Logo"
+              width={64}
+              height={64}
+              className="h-16 w-auto"
+              priority
+            />
+            <Image
+              src="/pmay-logo.svg"
+              alt="PMAY Logo"
+              width={64}
+              height={64}
+              className="h-16 w-auto"
+              priority
+            />
+            {/* <span className="font-bold text-lg text-blue-800 dark:text-blue-200">PMAY Chatbot</span> */}
+          </div>
+
+          {/* Spacer div to push the button to the right on larger screens */}
+          <div className="flex-1 hidden lg:block"></div>
+
+          {/* Right-aligned content (e.g., existing user avatar or settings) */}
+          <div className="flex items-center space-x-4">
+            {/* Add any other right-aligned header content here if it exists in the original header */}
+          </div>
         </header>
 
         {/* Scrollable Chat Messages Area */}
@@ -265,14 +303,23 @@ export default function ChatPage() {
             {showWelcomeMessage && (
               <div className="text-center p-8">
                 <div className="space-y-4 mt-4">
-                  <div className="mx-auto p-2 bg-gradient-to-br from-orange-100 to-green-100 rounded-full border-2 border-orange-200 shadow-lg w-28 h-28 flex items-center justify-center">
-                    <Image
-                      src="/pmay-logo-removebg-preview.png"
-                      alt="Government of India Emblem"
-                      width={95}
-                      height={95}
-                      className="object-contain"
-                    />
+                  <div className="mx-auto p-2 bg-gradient-to-br from-orange-100 to-green-100 rounded-full border-2 border-orange-200 shadow-lg w-40 h-40 flex items-center justify-center">
+                    <div className="flex items-center space-x-4">
+                      <Image
+                        src="/mohua-logo-removebgpng.png"
+                        alt="MoHUA Logo"
+                        width={65}
+                        height={65}
+                        className="object-contain"
+                      />
+                      <Image
+                        src="/pmay-logo.svg"
+                        alt="PMAY Logo"
+                        width={65}
+                        height={65}
+                        className="object-contain"
+                      />
+                    </div>
                   </div>
                   
                   <h3 className="text-3xl font-bold text-blue-800">PMAY Chatbot</h3>
@@ -359,6 +406,24 @@ export default function ChatPage() {
                     )}
                   </div>
                 ))}
+                {isLoading && !isAssistantStreaming && (
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
+                      <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
+                        <Image
+                          src="/bot-avatar.png"
+                          alt="bot-avatar"
+                          width={30}
+                          height={30}
+                          className="rounded-full"
+                        />
+                      </div>
+                    </Avatar>
+                    <div className="relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 bg-gray-100 text-gray-800">
+                      <ThinkingDots />
+                    </div>
+                  </div>
+                )}
                 <div ref={messagesEndRef} />
               </div>
             )}

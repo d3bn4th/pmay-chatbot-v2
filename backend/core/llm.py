@@ -99,7 +99,7 @@ Response:"""
         # Call the LLM with streaming enabled using AsyncClient
         client = AsyncClient()
         response_stream = await client.chat(
-            model="gemma3:1b",
+            model="llama3.2:1b",
             messages=[
                 {
                     "role": "system",

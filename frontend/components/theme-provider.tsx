@@ -6,7 +6,6 @@ type Theme = "dark" | "light" | "system";
 
 interface ThemeProviderProps {
   children: React.ReactNode;
-  attribute?: string;
   defaultTheme?: Theme;
   enableSystem?: boolean;
 }
@@ -23,7 +22,6 @@ export const useTheme = () => useContext(ThemeContext);
 
 export function ThemeProvider({ 
   children, 
-  attribute = "class",
   defaultTheme = "system",
   enableSystem = false 
 }: ThemeProviderProps) {

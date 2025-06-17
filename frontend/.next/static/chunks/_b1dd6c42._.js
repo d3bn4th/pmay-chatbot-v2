@@ -24,7 +24,7 @@ const useTheme = ()=>{
     return (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useContext"])(ThemeContext);
 };
 _s(useTheme, "gDsCjeeItUuvgOWf1v4qoK9RF6k=");
-function ThemeProvider({ children, attribute = "class", defaultTheme = "system", enableSystem = false }) {
+function ThemeProvider({ children, defaultTheme = "system", enableSystem = false }) {
     _s1();
     const [theme, setTheme] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(defaultTheme);
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
@@ -58,7 +58,7 @@ function ThemeProvider({ children, attribute = "class", defaultTheme = "system",
         children: children
     }, void 0, false, {
         fileName: "[project]/components/theme-provider.tsx",
-        lineNumber: 51,
+        lineNumber: 49,
         columnNumber: 5
     }, this);
 }

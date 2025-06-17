@@ -7,67 +7,108 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
 - **Intelligent Document Processing**: Upload and process PDF documents containing PMAY-related information
 - **Advanced RAG Implementation**: Uses ChromaDB for vector storage and retrieval
 - **Cross-Encoder Re-ranking**: Improves response relevance using semantic re-ranking
-- **Next.js Interface**: User-friendly chat interface with real-time responses
-- **Amazon Bedrock Integration**: Powered by Amazon's Nova Pro model for high-quality responses
+- **Modern Interface**: User-friendly chat interface with real-time responses
 - **Context-Aware Responses**: Provides accurate information based on official documents
+- **Document Management**: Upload, process, and manage PMAY-related documents
+- **Source Attribution**: View source documents for each response
 
 ## 🚨 Prerequisites
 
 - Node.js 18+
+- Python 3.8+
 - AWS account with access to Amazon Bedrock
 - Configured AWS credentials with permissions to access the Nova Pro model
 
 ## 🔧 Setup Instructions
 
-1. **Clone the repository**
-   \`\`\`sh
-   git clone <repository-url>
-   cd pmay-chatbot
-   \`\`\`
+### Backend Setup
 
-2. **Install dependencies**
-   \`\`\`sh
-   npm install
-   \`\`\`
+1. **Set up Python virtual environment**
+   ```sh
+   cd backend
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+2. **Install Python dependencies**
+   ```sh
+   pip install -r requirements.txt
+   pip install -e .
+   ```
 
 3. **Set up environment variables**
-   Create a `.env.local` file with the following variables:
-   \`\`\`
+   Create a `.env` file in the backend directory:
+   ```
    AWS_REGION=us-east-1
    AWS_ACCESS_KEY_ID=your_access_key
    AWS_SECRET_ACCESS_KEY=your_secret_key
-   \`\`\`
+   ```
 
-4. **Run the development server**
-   \`\`\`sh
+### Frontend Setup
+
+1. **Install Node.js dependencies**
+   ```sh
+   cd frontend
+   npm install
+   ```
+
+2. **Set up environment variables**
+   Create a `.env.local` file in the frontend directory:
+   ```
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   ```
+
+3. **Run the development servers**
+
+   In one terminal (backend):
+   ```sh
+   cd backend
+   uvicorn api.main:app --reload
+   ```
+
+   In another terminal (frontend):
+   ```sh
+   cd frontend
    npm run dev
-   \`\`\`
+   ```
 
-5. **Open [http://localhost:3000](http://localhost:3000)** in your browser to see the application.
+4. **Open [http://localhost:3000](http://localhost:3000)** in your browser to see the application.
 
-## 📚 Usage
+## 📚 Project Structure
 
-1. **Upload Documents**
-   - Upload PDF documents containing PMAY-related information
-   - The system will automatically process and index the content
+```
+pmay-chatbot/
+├── backend/
+│   ├── api/            # FastAPI application
+│   ├── core/           # Core business logic
+│   ├── models/         # Data models
+│   ├── utils/          # Utility functions
+│   ├── docs/           # Documentation files
+│   └── requirements.txt
+├── frontend/
+│   ├── app/           # Next.js pages and API routes
+│   ├── components/    # React components
+│   ├── hooks/         # Custom React hooks
+│   ├── lib/           # Utility functions
+│   └── public/        # Static assets
+└── models/            # Shared model definitions
+```
 
-2. **Ask Questions**
-   - Use the chat interface to ask questions about PMAY
-   - The chatbot will provide responses based on the uploaded documents
-   - View source documents for each response using the expandable section
+## 🛠️ Technical Stack
 
-## 🛠️ Development
+### Backend
+- **Framework**: FastAPI
+- **Vector Database**: ChromaDB
+- **Text Processing**: LangChain
+- **LLM Integration**: Amazon Bedrock
+- **Document Processing**: PyPDF2, Unstructured
 
-### Project Structure
-
-- `app/`: Next.js application files
-  - `api/chat/route.ts`: API route for chat functionality with RAG implementation
-  - `page.tsx`: Main chat interface
-- `components/`: React components
-  - `document-upload.tsx`: Component for uploading and processing documents
-  - `source-documents.tsx`: Component for displaying source documents
-- `hooks/`: Custom React hooks
-- `public/`: Static assets
+### Frontend
+- **Framework**: Next.js 14
+- **Styling**: Tailwind CSS
+- **UI Components**: shadcn/ui
+- **State Management**: React Hooks
+- **API Client**: Axios
 
 ## 🔍 Technical Details
 
@@ -75,7 +116,9 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
 - **Text Splitting**: RecursiveCharacterTextSplitter with 750 token chunks
 - **Re-ranking**: Cross-encoder model (ms-marco-MiniLM-L-6-v2)
 - **LLM**: Amazon Bedrock Nova Pro model
-- **UI Framework**: Next.js with Tailwind CSS styling
+- **Document Processing**: PDF parsing with metadata extraction
+- **API**: RESTful endpoints with FastAPI
+- **Authentication**: JWT-based authentication (optional)
 
 ## ⚠️ Common Issues and Solutions
 
@@ -90,13 +133,22 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
    - Check that uploaded PDFs are not password-protected
    - Ensure PDFs are text-based and not scanned images without OCR
 
+4. **Development Environment**
+   - Make sure both backend and frontend servers are running
+   - Check that environment variables are properly set
+   - Verify network connectivity between frontend and backend
+
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## 📝 License
 
-[Add appropriate license information]
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## 🔗 Useful Links
 
@@ -104,6 +156,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [MoHUA Official Website](https://mohua.gov.in/)
 - [Amazon Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
 - [ChromaDB Documentation](https://docs.trychroma.com/)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
 \`\`\`
 
 Let's update the layout.tsx file to include the proper metadata:
