@@ -2,6 +2,25 @@
 
 A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoHUA) to assist users with queries related to the Pradhan Mantri Awas Yojana (PMAY) scheme. This application uses advanced RAG (Retrieval Augmented Generation) with cross-encoder re-ranking to provide accurate and context-aware responses.
 
+## 📸 Screenshots
+
+<div align="center">
+  <img src="docs/images/chat-interface.png" alt="Chat Interface" width="600"/>
+  <p><em>Main chat interface of the PMAY Chatbot</em></p>
+</div>
+
+<div align="center">
+  <img src="docs/images/document-upload.png" alt="Document Upload" width="600"/>
+  <p><em>Document upload and processing interface</em></p>
+</div>
+
+## 🔄 System Architecture
+
+<div align="center">
+  <img src="docs/images/architecture.png" alt="System Architecture" width="600"/>
+  <p><em>High-level architecture of the PMAY Chatbot system</em></p>
+</div>
+
 ## 🌟 Features
 
 - **Intelligent Document Processing**: Upload and process PDF documents containing PMAY-related information
