@@ -1,9 +1,11 @@
 import torch
 from pathlib import Path
 import ollama
+from ollama import AsyncClient, Message
 from sentence_transformers import CrossEncoder
 import numpy as np
 from typing import List, Tuple
+import asyncio
 
 # Create models directory if it doesn't exist
 MODELS_DIR = Path("models")
@@ -15,26 +17,27 @@ def get_local_cross_encoder():
     model_path = MODELS_DIR / model_name.replace("/", "_")
     
     if not model_path.exists():
-        model = CrossEncoder(model_name, device="cuda" if torch.cuda.is_available() else "cpu")
+        model = CrossEncoder(model_name, device="cuda" if torch.cuda.is_available() else "cpu", activation_fn=torch.nn.Sigmoid())
         model.save(str(model_path))
     else:
-        model = CrossEncoder(str(model_path), device="cuda" if torch.cuda.is_available() else "cpu")
+        model = CrossEncoder(str(model_path), device="cuda" if torch.cuda.is_available() else "cpu", activation_fn=torch.nn.Sigmoid())
     
     return model
 
-def re_rank_cross_encoders(documents: List[str], prompt: str) -> Tuple[str, List[int]]:
+def re_rank_cross_encoders(documents: List[str], prompt: str) -> Tuple[str, List[int], List[float]]:
     """Rerank documents using cross-encoder model."""
     if not documents:
-        return "", []
+        return "", [], []
         
     try:
         # Ensure documents is a list of strings
         documents = [str(doc) for doc in documents if doc]
         if not documents:
-            return "", []
+            return "", [], []
             
         relevant_text = ""
         relevant_text_ids = []
+        relevant_scores = []
         encoder_model = get_local_cross_encoder()
         
         # Create pairs of (query, document) for ranking
@@ -53,21 +56,22 @@ def re_rank_cross_encoders(documents: List[str], prompt: str) -> Tuple[str, List
         # Combine top documents and their indices
         for idx in top_indices:
             idx_int = int(idx)  # Convert numpy.int64 to Python int
-            if 0 <= idx_int < len(documents):  # Ensure index is valid
+            if 0 <= idx_int < len(documents):
                 relevant_text += documents[idx_int] + "\n\n"
                 relevant_text_ids.append(idx_int)
+                relevant_scores.append(float(scores[idx_int]))
         
-        return relevant_text, relevant_text_ids
+        return relevant_text, relevant_text_ids, relevant_scores
         
     except Exception as e:
         print(f"Error in re_rank_cross_encoders: {str(e)}")
-        # Return first document as fallback
+        # Return first document as fallback with a dummy score
         if documents:
-            return documents[0], [0]
-        return "", []
+            return documents[0], [0], [0.5]
+        return "", [], []
 
-def call_llm(context: str, prompt: str, system_prompt: str):
-    """Call the LLM with the given context and prompt."""
+async def call_llm(context: str, prompt: str, system_prompt: str):
+    """Call the LLM with the given context and prompt. This function is an async generator."""
     try:
         # Ensure context is a string
         if isinstance(context, (list, tuple)):
@@ -76,7 +80,7 @@ def call_llm(context: str, prompt: str, system_prompt: str):
             context = str(context)
 
         # Create the full prompt with specific formatting instructions
-        full_prompt_for_llm = f"""{system_prompt}
+        full_prompt = f"""{system_prompt}
 
 Context: {context}
 
@@ -91,9 +95,11 @@ Assistant: Please provide a clear and concise response. Use only these formattin
 
 Response:"""
         
-        # Call the LLM with streaming enabled
-        stream_response = ollama.chat(
-            model="llama3.2:3b",
+        # print("DEBUG: Before AsyncClient.chat call")
+        # Call the LLM with streaming enabled using AsyncClient
+        client = AsyncClient()
+        response_stream = await client.chat(
+            model="gemma3:1b",
             messages=[
                 {
                     "role": "system",
@@ -104,20 +110,29 @@ Response:"""
                     "content": f"Context: {context}\n\nQuestion: {prompt}",
                 },
             ],
+            stream=True,
             options={
                 "num_gpu": 1,
                 "num_thread": 4,
                 "max_tokens": 1000,
-                "stream": True # This is crucial for streaming
             }
         )
+        # print("DEBUG: After AsyncClient.chat call, before iterating chunks")
         
-        # Iterate over the streamed chunks and yield the content directly
-        for chunk in stream_response:
-            if hasattr(chunk, 'message') and hasattr(chunk.message, 'content'):
-                yield chunk.message.content # Yield the raw content chunk directly
-
+        # Iterate over the streamed chunks from the AsyncClient
+        i = 0
+        async for chunk_data in response_stream:
+            if 'message' in chunk_data and 'content' in chunk_data['message']:
+                content_to_yield = chunk_data['message']['content']
+                if content_to_yield:
+                    # print(f"DEBUG LLM: Yielding chunk {i} content: {content_to_yield[:100]}...") # Log full chunk content
+                    yield content_to_yield  # Yield the raw content chunk directly
+            else:
+                print(f"DEBUG LLM: Chunk {i} has no message or content in its dictionary: {chunk_data}")
+            i += 1
+        print("DEBUG: Finished yielding chunks")
+        
     except Exception as e:
         print(f"Error in call_llm: {str(e)}")
-        # In a streaming scenario, yield an error message
-        yield f"I apologize, but I encountered an error while processing your request: {str(e)}" 
+        # In a streaming scenario, yield an error message to the frontend
+        yield f"I apologize, but I encountered an error while processing your request: {str(e)}"

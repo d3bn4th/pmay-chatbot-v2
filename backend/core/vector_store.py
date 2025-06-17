@@ -24,7 +24,7 @@ def query_collection(prompt: str, n_results: int = 20):
         results = collection.query(
             query_texts=[prompt],
             n_results=n_results,
-            include=["documents"]
+            include=["documents", "metadatas"]
         )
         
         # Debug print
@@ -34,23 +34,25 @@ def query_collection(prompt: str, n_results: int = 20):
         if results and "documents" in results and results["documents"]:
             # ChromaDB returns documents as a list of lists, we want just the first list
             documents = results["documents"][0]
+            metadatas = results["metadatas"][0] if "metadatas" in results and results["metadatas"] else []
             # Filter out any None or empty documents and ensure they are strings
             documents = [str(doc) for doc in documents if doc]
             print(f"Processed {len(documents)} documents")
-            return {"documents": documents}
+            return {"documents": documents, "metadatas": metadatas}
         
         print("No documents found in results")
-        return {"documents": []}
+        return {"documents": [], "metadatas": []}
         
     except Exception as e:
         print(f"Error in query_collection: {str(e)}")
-        return {"documents": []}
+        return {"documents": [], "metadatas": []}
 
 def add_to_vector_collection(splits: list[Document], collection_name: str) -> int:
     """Add document splits to the vector collection."""
     collection = get_vector_collection()
     collection.add(
         documents=[s.page_content for s in splits],
+        metadatas=[s.metadata for s in splits],
         ids=[f"doc_{collection_name}_{i}" for i in range(len(splits))],
     )
     return len(splits) 

@@ -1,65 +1,51 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import MarkdownIt from "markdown-it"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Loader2, Send, Info, Home, FileText, Settings, UserCircle2, Menu } from "lucide-react"
+import { Loader2, Send, Info, Home, FileText, Settings, Menu } from "lucide-react"
 import Image from "next/image"
-import { SourceDocuments } from "@/components/source-documents"
+import { SourceDocument, SourceDocuments } from "@/components/source-documents"
 import { useMobile } from "@/hooks/use-mobile"
-import { type CoreMessage } from 'ai'
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
-const md = new MarkdownIt({
-  html: false,
-  breaks: true,
-  linkify: true
-})
-
-// Sample source documents for demonstration
-const sampleSourceDocs = [
-  {
-    content:
-      "PMAY (Pradhan Mantri Awas Yojana) is a flagship scheme of the Government of India aimed at providing housing for all by 2022.",
-    source: "PMAY_Guidelines_2021.pdf",
-    relevance: 0.92,
-  },
-  {
-    content:
-      "Beneficiaries of PMAY include Economically Weaker Section (EWS), Low Income Group (LIG), and Middle Income Group (MIG).",
-    source: "PMAY_Eligibility_Criteria.pdf",
-    relevance: 0.85,
-  },
-]
+// Define a custom message type that includes an 'id' and optional sources
+interface ChatMessageType {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  sources?: SourceDocument[];
+}
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<CoreMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const scrollAreaRef = useRef<HTMLHTMLDivElement>(null)
   const isMobile = useMobile()
   const [showSidebar, setShowSidebar] = useState(!isMobile)
   const [activeSection, setActiveSection] = useState("home")
+  const [userMessageCount, setUserMessageCount] = useState(0); // New state to trigger scroll
 
   useEffect(() => {
     setShowSidebar(!isMobile)
   }, [isMobile])
 
+  // New useEffect for scrolling only when user sends a message
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+    if (userMessageCount > 0 && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      // console.log("User message sent, scrolling to end.", messagesEndRef.current);
     }
-  }, [messages])
+  }, [userMessageCount]);
 
   useEffect(() => {
     if (error) {
-      console.error("useChat error object:", error)
+      // console.error("Chat error object:", error) // Changed from useChat error
     }
   }, [error])
 
@@ -69,7 +55,7 @@ export default function ChatPage() {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
-    const userMessage: CoreMessage = {
+    const userMessage: ChatMessageType = {
       id: Date.now().toString(),
       role: 'user',
       content: input,
@@ -79,6 +65,9 @@ export default function ChatPage() {
     setInput('')
     setIsLoading(true)
     setError(null)
+    setUserMessageCount(prevCount => prevCount + 1); // Increment to trigger scroll
+
+    const newAssistantMessageId = `ai-response-${Date.now()}`
 
     try {
       const response = await fetch('/api/chat', {
@@ -86,7 +75,7 @@ export default function ChatPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages: [userMessage] }), // Send only the last user message
+        body: JSON.stringify({ messages: [userMessage] }),
       })
 
       if (!response.ok || !response.body) {
@@ -97,57 +86,58 @@ export default function ChatPage() {
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let assistantResponseContent = ''
-      let isFirstChunk = true
+      let assistantSources: SourceDocument[] = [];
 
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
 
         const chunk = decoder.decode(value, { stream: true })
-        // Split chunk by 'data: ' to handle multiple SSE messages in one chunk
+        // console.log('Frontend: Raw chunk received:', chunk.length, 'bytes')
         const sseMessages = chunk.split('\n\n').filter(msg => msg.startsWith('data: ')).map(msg => msg.substring(6))
 
         for (const sseMessage of sseMessages) {
+          // console.log('Frontend: Processing SSE message:', sseMessage)
           try {
             const parsedData = JSON.parse(sseMessage)
-            const content = parsedData.content
-
-            if (content) {
-              assistantResponseContent += content
-              setMessages((prevMessages) => {
-                if (isFirstChunk) {
-                  isFirstChunk = false
-                  return [
-                    ...prevMessages,
-                    {
-                      id: 'ai-response', // Assign a consistent ID for the AI response being streamed
-                      role: 'assistant',
-                      content: assistantResponseContent,
-                    },
-                  ]
-                } else {
-                  // Update the last message's content
-                  const lastMessage = prevMessages[prevMessages.length - 1]
-                  if (lastMessage && lastMessage.id === 'ai-response') {
-                    return prevMessages.map((msg, index) =>
-                      index === prevMessages.length - 1
-                        ? { ...msg, content: assistantResponseContent }
-                        : msg
-                    )
-                  } else {
-                    // This case should ideally not happen if logic is correct, but as a fallback
-                    return [
-                      ...prevMessages,
-                      {
-                        id: 'ai-response',
-                        role: 'assistant',
-                        content: assistantResponseContent,
-                      }
-                    ]
-                  }
-                }
-              })
+            // console.log('Frontend: Parsed SSE data:', parsedData)
+            
+            if (parsedData.type === 'text') {
+              const content = parsedData.content;
+              if (content) {
+                assistantResponseContent += content;
+              }
+            } else if (parsedData.type === 'sources') {
+              if (parsedData.sources) {
+                assistantSources = parsedData.sources;
+              }
             }
+
+            setMessages((prevMessages) => {
+              const existingAssistantMessageIndex = prevMessages.findIndex(
+                (msg) => msg.id === newAssistantMessageId
+              );
+
+              if (existingAssistantMessageIndex !== -1) {
+                // Update existing assistant message
+                return prevMessages.map((msg, index) =>
+                  index === existingAssistantMessageIndex
+                    ? { ...msg, content: assistantResponseContent, sources: assistantSources }
+                    : msg
+                );
+              } else {
+                // Add new assistant message (first chunk)
+                return [
+                  ...prevMessages,
+                  {
+                    id: newAssistantMessageId,
+                    role: 'assistant',
+                    content: assistantResponseContent,
+                    sources: assistantSources
+                  },
+                ];
+              }
+            });
           } catch (jsonError) {
             console.error('Failed to parse SSE message:', sseMessage, jsonError)
           }
@@ -170,7 +160,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-gray-50">
       {/* Sidebar */}
       <div
         className={`fixed top-0 left-0 h-screen z-50 ${
@@ -255,9 +245,9 @@ export default function ChatPage() {
       </div>
 
       {/* Main Content */}
-      <div className={`flex-1 flex flex-col ${showSidebar ? "ml-64" : "ml-0"}`}>
+      <div className={`flex-1 flex flex-col h-full ${showSidebar ? "ml-64" : "ml-0"}`}>
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
+        <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm shrink-0">
           <Button variant="ghost" size="sm" onClick={() => setShowSidebar(!showSidebar)} className="md:hidden">
             <Menu className="h-5 w-5" />
           </Button>
@@ -265,147 +255,137 @@ export default function ChatPage() {
           <div className="w-8"></div>
         </header>
 
-        {/* Chat Area */}
-        <div className="flex-1 p-4 overflow-hidden">
-          <Card className="h-full flex flex-col shadow-lg bg-white">
-            <CardContent className="flex-1 p-0 overflow-hidden bg-white">
-              <ScrollArea ref={scrollAreaRef} className="h-full overflow-y-auto">
-                <div
-                  className={`min-h-full flex flex-col transition-all duration-500 ease-in-out bg-white
-                  ${showWelcomeMessage ? "items-center justify-center" : "items-stretch justify-start pt-6"}`}
-                >
-                  {/* Welcome Message Section */}
-                  {showWelcomeMessage && (
-                    <div className="text-center p-8">
-                      <div className="space-y-4 mt-4">
-                        <div className="mx-auto p-2 bg-gradient-to-br from-orange-100 to-green-100 rounded-full border-2 border-orange-200 shadow-lg w-28 h-28 flex items-center justify-center">
-                          <Image
-                            src="/pmay-logo-removebg-preview.png"
-                            alt="Government of India Emblem"
-                            width={95}
-                            height={95}
-                            className="object-contain"
-                          />
-                        </div>
-                        
-                        <h3 className="text-3xl font-bold text-blue-800">PMAY Chatbot</h3>
-                        <p className="text-lg text-gray-600 max-w-md mx-auto">
-                          Ask questions about the Pradhan Mantri Awas Yojana (PMAY) scheme and get accurate,
-                          context-aware responses.
-                        </p>
-                        <div className="flex items-center justify-center mt-3">
-                          <Info className="h-4 w-4 text-blue-600 mr-2" />
-                          <span className="text-sm text-blue-600">Powered by RAG with cross-encoder re-ranking</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Initial Loading Spinner */}
-                  {isLoading && messages.length === 0 && (
-                    <div className="flex-1 flex items-center justify-center">
-                      <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
-                    </div>
-                  )}
-
-                  {/* Error Message */}
-                  {error && (
-                    <div className="flex-1 flex items-center justify-center text-center p-8">
-                      <div className="space-y-3 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                        <svg
-                          className="h-12 w-12 mx-auto text-red-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                          />
-                        </svg>
-                        <h3 className="text-xl font-semibold">Oops! Something went wrong.</h3>
-                        <p className="text-sm">{error.message || "Please try again later."}</p>
-                        <Button onClick={() => window.location.reload()} variant="destructive" size="sm">
-                          Refresh
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Messages List */}
-                  {messages.length > 0 && (
-                    <div className="space-y-6 w-full px-4 md:px-6 pb-8">
-                      {messages.map((message) => (
-                        <div
-                          key={message.id}
-                          className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                        >
-                          {message.role !== "user" && (
-                            <Avatar
-                              className={`h-10 w-10 border border-gray-200 shadow-md bg-gradient-to-br from-orange-100 to-green-100 ${isLoading && message.id === messages[messages.length - 1]?.id && messages[messages.length - 1].role !== "user" ? "animate-pulse" : ""}`}
-                            >
-                              <AvatarImage src="/indian-govt-emblem.png" alt="AI Avatar" className="object-contain" />
-                              <AvatarFallback className="bg-blue-100 text-blue-800 text-xs">AI</AvatarFallback>
-                            </Avatar>
-                          )}
-                          <div className="flex flex-col max-w-[75%]">
-                            <div
-                              className={`rounded-xl px-4 py-3 shadow-md 
-                              ${
-                                message.role === "user"
-                                  ? "bg-blue-600 text-white rounded-br-none"
-                                  : "bg-gray-200 text-gray-800 rounded-bl-none"
-                              }`}
-                              dangerouslySetInnerHTML={{ __html: md.render(message.content) }}
-                            />
-                            {message.role !== "user" && message.id === messages[messages.length - 1]?.id && isLoading && (
-                                <div className="ml-auto mt-2 flex items-center">
-                                    <Loader2 className="h-4 w-4 text-gray-500 animate-spin mr-1" />
-                                    <span className="text-xs text-gray-500">Generating...</span>
-                                </div>
-                            )}
-                            {message.role === "assistant" && <SourceDocuments documents={sampleSourceDocs} />}
-                          </div>
-                          {message.role === "user" && (
-                            <Avatar className="h-10 w-10 border-2 border-blue-200 shadow-md">
-                              <AvatarFallback className="bg-blue-600 text-white">
-                                <UserCircle2 className="h-5 w-5" />
-                              </AvatarFallback>
-                            </Avatar>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
+        {/* Scrollable Chat Messages Area */}
+        <div className="flex-1 overflow-y-auto">
+          <div
+            className={`flex flex-col px-4 md:px-6 bg-white pt-6 pb-8
+            ${showWelcomeMessage ? "items-center justify-center" : "items-stretch justify-start"}`}
+          >
+            {/* Welcome Message Section */}
+            {showWelcomeMessage && (
+              <div className="text-center p-8">
+                <div className="space-y-4 mt-4">
+                  <div className="mx-auto p-2 bg-gradient-to-br from-orange-100 to-green-100 rounded-full border-2 border-orange-200 shadow-lg w-28 h-28 flex items-center justify-center">
+                    <Image
+                      src="/pmay-logo-removebg-preview.png"
+                      alt="Government of India Emblem"
+                      width={95}
+                      height={95}
+                      className="object-contain"
+                    />
+                  </div>
+                  
+                  <h3 className="text-3xl font-bold text-blue-800">PMAY Chatbot</h3>
+                  <p className="text-lg text-gray-600 max-w-md mx-auto">
+                    Ask questions about the Pradhan Mantri Awas Yojana (PMAY) scheme and get accurate,
+                    context-aware responses.
+                  </p>
+                  <div className="flex items-center justify-center mt-3">
+                    <Info className="h-4 w-4 text-blue-600 mr-2" />
+                    <span className="text-sm text-blue-600">Powered by RAG with cross-encoder re-ranking</span>
+                  </div>
                 </div>
-              </ScrollArea>
-            </CardContent>
+              </div>
+            )}
 
-            <CardFooter className="border-t border-gray-200 p-4 bg-gray-50">
-              <form onSubmit={handleSubmit} className="flex w-full items-center gap-3">
-                <Input
-                  placeholder="Ask about PMAY scheme..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  className="flex-1 bg-white border-gray-300 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 text-gray-900 placeholder:text-gray-500 rounded-lg py-3 px-4"
-                  disabled={isLoading}
-                  aria-label="Chat input"
-                />
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-3 shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 disabled:bg-blue-400 disabled:transform-none disabled:shadow-none"
-                  disabled={isLoading || !input.trim()}
-                  aria-label="Send message"
-                >
-                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                </Button>
-              </form>
-            </CardFooter>
-          </Card>
+            {/* Initial Loading Spinner */}
+            {isLoading && messages.length === 0 && (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
+              </div>
+            )}
+
+            {/* Error Message */}
+            {error && (
+              <div className="flex-1 flex items-center justify-center text-center p-8">
+                <div className="space-y-3 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                  <svg
+                    className="h-12 w-12 mx-auto text-red-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.1-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                  <h3 className="text-xl font-semibold">Oops! Something went wrong.</h3>
+                  <p className="text-sm">{error.message || "Please try again later."}</p>
+                  <Button onClick={() => window.location.reload()} variant="destructive" size="sm">
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Messages List */}
+            {messages.length > 0 && (
+              <div className="space-y-6 w-full">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {message.role === "assistant" && (
+                      <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
+                        <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
+                          <Image
+                            src="/bot-avatar.png"
+                            alt="bot-avatar"
+                            width={30}
+                            height={30}
+                            className="rounded-full"
+                          />
+                        </div>
+                      </Avatar>
+                    )}
+                    <div
+                      className={`relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 ${message.role === "user" ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-800"}`}
+                    >
+                      <div className="prose prose-sm leading-normal text-gray-900 break-words">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                      </div>
+                      {message.sources && message.sources.length > 0 && message.role !== "user" && (
+                        <SourceDocuments documents={message.sources} />
+                      )}
+                    </div>
+                    {message.role === "user" && (
+                      <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
+                        <AvatarFallback className="bg-gray-300 text-gray-800 text-xs">You</AvatarFallback>
+                      </Avatar>
+                    )}
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Input Area (fixed at bottom) */}
+        <div className="border-t border-gray-200 p-4 bg-gray-50 shrink-0">
+          <form onSubmit={handleSubmit} className="flex w-full items-center gap-3">
+            <Input
+              placeholder="Ask about PMAY scheme..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="flex-1 bg-white border-gray-300 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 text-gray-900 placeholder:text-gray-500 rounded-lg py-3 px-4"
+              disabled={isLoading}
+              aria-label="Chat input"
+            />
+            <Button
+              type="submit"
+              size="lg"
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-3 shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 disabled:bg-blue-400 disabled:transform-none disabled:shadow-none"
+              disabled={isLoading || !input.trim()}
+              aria-label="Send message"
+            >
+              {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+            </Button>
+          </form>
         </div>
       </div>
     </div>

@@ -4,10 +4,16 @@ import { useState } from "react"
 import { ChevronDown, ChevronUp, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-interface SourceDocument {
-  content: string
-  source: string
-  relevance: number
+export interface SourceDocument {
+  text: string
+  score: number
+  metadata: {
+    source?: string
+    title?: string
+    author?: string
+    date?: string
+    page?: number
+  }
 }
 
 interface SourceDocumentsProps {
@@ -41,10 +47,10 @@ export function SourceDocuments({ documents }: SourceDocumentsProps) {
             <div key={index} className="bg-gray-50 p-2 rounded border border-gray-200">
               <div className="flex items-center text-gray-600 mb-1">
                 <FileText className="h-3 w-3 mr-1" />
-                <span className="font-medium">{doc.source}</span>
-                <span className="ml-auto text-gray-400">Relevance: {(doc.relevance * 100).toFixed(0)}%</span>
+                <span className="font-medium">{doc.metadata?.source || "Document"}</span>
+                <span className="ml-auto text-gray-400">Relevance: {(doc.score * 100).toFixed(0)}%</span>
               </div>
-              <p className="text-gray-700 text-xs">{doc.content}</p>
+              <p className="text-gray-700 text-xs">{doc.text}</p>
             </div>
           ))}
         </div>

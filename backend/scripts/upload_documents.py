@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Dict
 import logging
 from tqdm import tqdm
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -13,20 +14,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class DocumentUploader:
-    def __init__(self, api_url: str = "http://localhost:8000/upload"):
+    def __init__(self, api_url: str = "http://localhost:8000/upload", max_retries: int = 5, retry_delay: int = 5):
         """
         Initialize the document uploader.
         
         Args:
             api_url (str): The URL of the upload endpoint
+            max_retries (int): Maximum number of retries for document upload
+            retry_delay (int): Delay in seconds between retries
         """
         self.api_url = api_url
         self.successful_uploads: List[Dict] = []
         self.failed_uploads: List[Dict] = []
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
     def upload_document(self, file_path: str) -> bool:
         """
-        Upload a single document to the vector database.
+        Upload a single document to the vector database with retries.
         
         Args:
             file_path (str): Path to the document file
@@ -34,44 +39,47 @@ class DocumentUploader:
         Returns:
             bool: True if upload was successful, False otherwise
         """
-        try:
-            if not os.path.exists(file_path):
-                logger.error(f"File not found: {file_path}")
-                return False
-
-            if not file_path.lower().endswith('.pdf'):
-                logger.error(f"Only PDF files are supported: {file_path}")
-                return False
-
-            with open(file_path, 'rb') as file:
-                files = {'file': (os.path.basename(file_path), file, 'application/pdf')}
-                response = requests.post(self.api_url, files=files)
-
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"Successfully processed {result['message']}")
-                logger.info(f"Number of chunks added: {result['chunks_added']}")
-                self.successful_uploads.append({
-                    'file': file_path,
-                    'chunks_added': result['chunks_added']
-                })
-                return True
-            else:
-                logger.error(f"Failed to upload {file_path}: {response.status_code}")
-                logger.error(response.text)
-                self.failed_uploads.append({
-                    'file': file_path,
-                    'error': f"Status code: {response.status_code}, Response: {response.text}"
-                })
-                return False
-
-        except Exception as e:
-            logger.error(f"Error uploading {file_path}: {str(e)}")
-            self.failed_uploads.append({
-                'file': file_path,
-                'error': str(e)
-            })
+        if not os.path.exists(file_path):
+            logger.error(f"File not found: {file_path}")
             return False
+
+        if not file_path.lower().endswith('.pdf'):
+            logger.error(f"Only PDF files are supported: {file_path}")
+            return False
+
+        for attempt in range(self.max_retries):
+            try:
+                with open(file_path, 'rb') as file:
+                    files = {'file': (os.path.basename(file_path), file, 'application/pdf')}
+                    response = requests.post(self.api_url, files=files, timeout=60) # Add timeout
+
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"Successfully processed {result['message']}")
+                    logger.info(f"Number of chunks added: {result['chunks_added']}")
+                    self.successful_uploads.append({
+                        'file': file_path,
+                        'chunks_added': result['chunks_added']
+                    })
+                    return True
+                else:
+                    logger.error(f"Failed to upload {file_path} on attempt {attempt + 1}/{self.max_retries}: Status code {response.status_code}")
+                    logger.error(response.text)
+            except requests.exceptions.ConnectionError as e:
+                logger.error(f"Connection error uploading {file_path} on attempt {attempt + 1}/{self.max_retries}: {str(e)}")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Retrying in {self.retry_delay} seconds...")
+                    time.sleep(self.retry_delay)
+            except Exception as e:
+                logger.error(f"Unexpected error uploading {file_path} on attempt {attempt + 1}/{self.max_retries}: {str(e)}")
+                break # Break on unexpected errors
+        
+        # If all retries fail
+        self.failed_uploads.append({
+            'file': file_path,
+            'error': f"Failed after {self.max_retries} attempts."
+        })
+        return False
 
     def upload_directory(self, directory_path: str) -> None:
         """
@@ -124,10 +132,12 @@ def main():
                       help=f'Path to a PDF file or directory containing PDF files (default: {docs_dir})')
     parser.add_argument('--api-url', default='http://localhost:8000/upload',
                       help='URL of the upload API endpoint')
+    parser.add_argument('--max-retries', type=int, default=5, help='Maximum number of retries for upload')
+    parser.add_argument('--retry-delay', type=int, default=5, help='Delay in seconds between retries')
     
     args = parser.parse_args()
     
-    uploader = DocumentUploader(api_url=args.api_url)
+    uploader = DocumentUploader(api_url=args.api_url, max_retries=args.max_retries, retry_delay=args.retry_delay)
     
     if os.path.isfile(args.path):
         uploader.upload_document(args.path)

@@ -17,6 +17,10 @@ def process_document(file_content: bytes, filename: str) -> list[Document]:
 
         os.unlink(tmp_file_path)
 
+        # Add filename as source metadata to each document
+        for doc in documents:
+            doc.metadata["source"] = filename
+
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1500, chunk_overlap=200
         )
