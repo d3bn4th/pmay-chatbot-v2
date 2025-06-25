@@ -4,12 +4,12 @@ import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
-import { Loader2, Send, Info, Home, FileText, Settings, Menu, ArrowLeft } from "lucide-react"
+import { Loader2, Send, Info, Home, FileText, Settings, Menu, ArrowLeft, ThumbsUp, ThumbsDown } from "lucide-react"
 import Image from "next/image"
 import { SourceDocument, SourceDocuments } from "@/components/source-documents"
 import { useMobile } from "@/hooks/use-mobile"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import MarkdownMessage from "@/components/markdown-message"
+import { LanguageSelector } from "@/components/language-selector"
 
 // Define a custom message type that includes an 'id' and optional sources
 interface ChatMessageType {
@@ -36,6 +36,8 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [isAssistantStreaming, setIsAssistantStreaming] = useState(false)
+  const [feedbackSent, setFeedbackSent] = useState<{ [id: string]: boolean }>({})
+  const [selectedLanguage, setSelectedLanguage] = useState("en")
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isMobile = useMobile()
@@ -175,6 +177,20 @@ export default function ChatPage() {
     }
   }
 
+  async function handleFeedback(messageId: string, feedback: "up" | "down", content: string) {
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, feedback, content }),
+      });
+      setFeedbackSent((prev) => ({ ...prev, [messageId]: true }));
+      setTimeout(() => setFeedbackSent((prev) => ({ ...prev, [messageId]: false })), 2000);
+    } catch {
+      alert("Failed to send feedback.");
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Sidebar */}
@@ -185,13 +201,34 @@ export default function ChatPage() {
         ${isMobile ? "shadow-xl" : ""}`}
       >
         <div className="p-4 h-full flex flex-col">
+          {/* Desktop-only: MoHUA and PMAY logos above the title */}
+          <div className="hidden lg:flex flex-col items-center mb-4">
+            <div className="bg-white rounded-lg shadow p-2 flex items-center space-x-2 mb-2">
+              <Image
+                src="/mohua-logo-removebgpng.png"
+                alt="MoHUA Logo"
+                width={48}
+                height={48}
+                className="h-12 w-auto"
+                priority
+              />
+              <Image
+                src="/pmay-logo.svg"
+                alt="PMAY Logo"
+                width={48}
+                height={48}
+                className="h-12 w-auto"
+                priority
+              />
+            </div>
+          </div>
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-lg font-bold">PMAY Chatbot</h1>
+            <h1 className="text-lg font-bold w-full text-center">PMAY Chatbot</h1>
             {isMobile && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-white hover:bg-blue-700"
+                className="text-white hover:bg-blue-700 absolute right-4"
                 onClick={() => setShowSidebar(false)}
               >
                 <ArrowLeft className="h-6 w-6" />
@@ -231,6 +268,13 @@ export default function ChatPage() {
               Settings
             </Button>
           </nav>
+          {/* Language Selector directly below nav (below Settings) */}
+          <div className="mb-6">
+            <LanguageSelector
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={setSelectedLanguage}
+            />
+          </div>
 
           {/* Dynamic Content Based on Active Section */}
           <div className="flex-1 overflow-y-auto">
@@ -264,27 +308,29 @@ export default function ChatPage() {
             <Menu className="h-6 w-6" />
           </Button>
 
-          <div className={`absolute left-1/2 -translate-x-1/2 flex items-center space-x-4 transition-opacity duration-500 ${messages.length > 0 ? 'opacity-100' : 'opacity-0'}`}>
-            <Image
-              src="/mohua-logo-removebgpng.png"
-              alt="MoHUA Logo"
-              width={64}
-              height={64}
-              className="h-16 w-auto"
-              priority
-            />
-            <Image
-              src="/pmay-logo.svg"
-              alt="PMAY Logo"
-              width={64}
-              height={64}
-              className="h-16 w-auto"
-              priority
-            />
-            {/* <span className="font-bold text-lg text-blue-800 dark:text-blue-200">PMAY Chatbot</span> */}
+          {/* Mobile-only: MoHUA and PMAY logos in the top bar */}
+          <div className="flex items-center space-x-2 flex lg:hidden absolute left-1/2 -translate-x-1/2">
+            <div className="bg-white rounded-lg shadow p-2 flex items-center space-x-2">
+              <Image
+                src="/mohua-logo-removebgpng.png"
+                alt="MoHUA Logo"
+                width={40}
+                height={40}
+                className="h-10 w-auto"
+                priority
+              />
+              <Image
+                src="/pmay-logo.svg"
+                alt="PMAY Logo"
+                width={40}
+                height={40}
+                className="h-10 w-auto"
+                priority
+              />
+            </div>
           </div>
 
-          {/* Spacer div to push the button to the right on larger screens */}
+          {/* Removed logo images from header for desktop view */}
           <div className="flex-1 hidden lg:block"></div>
 
           {/* Right-aligned content (e.g., existing user avatar or settings) */}
@@ -374,7 +420,7 @@ export default function ChatPage() {
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                    className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"} animate-fade-in-slide-up`}
                   >
                     {message.role === "assistant" && (
                       <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
@@ -392,11 +438,39 @@ export default function ChatPage() {
                     <div
                       className={`relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 ${message.role === "user" ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-800"}`}
                     >
-                      <div className="prose prose-sm leading-normal text-gray-900 break-words">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                      <div className="prose prose-sm prose-blue prose-a:text-blue-600 prose-a:underline leading-normal text-gray-900 break-words">
+                        {message.role === "assistant" ? (
+                          <MarkdownMessage>{message.content}</MarkdownMessage>
+                        ) : (
+                          message.content
+                        )}
                       </div>
                       {message.sources && message.sources.length > 0 && message.role !== "user" && (
                         <SourceDocuments documents={message.sources} />
+                      )}
+                      {/* Thumbs up/down for assistant messages */}
+                      {message.role === "assistant" && (
+                        <div className="absolute bottom-2 right-2 flex gap-1">
+                          <button
+                            className="bg-white/80 hover:bg-green-100 border border-green-200 rounded-full p-1 shadow transition"
+                            title="Thumbs up"
+                            disabled={feedbackSent[message.id]}
+                            onClick={() => handleFeedback(message.id, "up", message.content)}
+                          >
+                            <ThumbsUp className="h-4 w-4 text-green-600" />
+                          </button>
+                          <button
+                            className="bg-white/80 hover:bg-red-100 border border-red-200 rounded-full p-1 shadow transition"
+                            title="Thumbs down"
+                            disabled={feedbackSent[message.id]}
+                            onClick={() => handleFeedback(message.id, "down", message.content)}
+                          >
+                            <ThumbsDown className="h-4 w-4 text-red-600" />
+                          </button>
+                          {feedbackSent[message.id] && (
+                            <span className="ml-2 text-xs text-green-600">Thank you!</span>
+                          )}
+                        </div>
                       )}
                     </div>
                     {message.role === "user" && (

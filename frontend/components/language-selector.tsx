@@ -36,7 +36,7 @@ export function LanguageSelector({ selectedLanguage, onLanguageChange }: Languag
             <SelectItem key={lang.code} value={lang.code} className="py-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-1 sm:gap-0">
                 <span className="text-sm sm:text-base">{lang.name}</span>
-                <span className="text-xs sm:text-sm text-gray-500">{lang.nativeName}</span>
+                <span className="text-xs sm:text-sm text-gray-500 ml-3 sm:ml-4">{lang.nativeName}</span>
               </div>
             </SelectItem>
           ))}

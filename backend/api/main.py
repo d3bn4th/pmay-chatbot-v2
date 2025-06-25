@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,6 +7,7 @@ import uvicorn
 import json
 import asyncio
 import uuid
+import os
 from core.vector_store import query_collection, add_to_vector_collection
 from core.document_processor import process_document
 from core.llm import re_rank_cross_encoders, call_llm
@@ -33,6 +34,30 @@ class DocumentUploadResponse(BaseModel):
     message: str
     chunks_added: int
 
+class FeedbackRequest(BaseModel):
+    message_id: str
+    feedback: str  # 'up' or 'down'
+    content: str
+
+# Add a simple ambiguous question detector
+AMBIGUOUS_KEYWORDS = [
+    "this", "that", "thing", "stuff", "something", "anything", "everything", "details", "info", "information", "etc", "tell me more", "explain more", "more info", "more information"
+]
+
+def is_ambiguous_question(question: str) -> bool:
+    q = question.strip().lower()
+    # Flag as ambiguous if it's just gibberish or a single non-alphabetic word
+    if len(q.split()) == 1 and not q.isalpha():
+        return True
+    # If the question is only a vague word or phrase
+    for word in AMBIGUOUS_KEYWORDS:
+        if q == word or q.startswith(word):
+            return True
+    # If the question is too short (1 word) and not a known valid question
+    if len(q.split()) < 2:
+        return True
+    return False
+
 @app.post("/chat")
 async def chat(request: Request):
     try:
@@ -54,6 +79,13 @@ async def chat(request: Request):
 
         async def generate_response_stream():
             try:
+                # Ambiguous question check
+                if is_ambiguous_question(chat_request.message):
+                    ambiguous_response = "Your question is too ambiguous. Please provide more details so I can assist you better."
+                    yield f"data: {json.dumps({'type': 'text', 'content': ambiguous_response})}\n\n"
+                    print(f"Yielding ambiguous: {ambiguous_response}")
+                    return
+
                 # Removed initial 'Stream started.' message
                 # yield f"data: {json.dumps({'type': 'text', 'content': 'Stream started.'})}\n\n"
                 # print("DEBUG: Initial 'Stream started.' message yielded.")
@@ -152,6 +184,22 @@ async def upload_document(file: UploadFile = File(...)):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/feedback")
+async def feedback(feedback: FeedbackRequest):
+    try:
+        log_entry = {
+            "message_id": feedback.message_id,
+            "feedback": feedback.feedback,
+            "content": feedback.content
+        }
+        log_line = json.dumps(log_entry) + "\n"
+        log_path = os.path.join(os.path.dirname(__file__), "..", "feedback.log")
+        with open(log_path, "a") as f:
+            f.write(log_line)
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 
