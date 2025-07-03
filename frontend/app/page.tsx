@@ -436,9 +436,9 @@ export default function ChatPage() {
                       </Avatar>
                     )}
                     <div
-                      className={`relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 ${message.role === "user" ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-800"}`}
+                      className={`relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 ${message.role === "user" ? "bg-blue-700 text-white" : "bg-gray-100 text-gray-800"}`}
                     >
-                      <div className="prose prose-sm prose-blue prose-a:text-blue-600 prose-a:underline leading-normal text-gray-900 break-words">
+                      <div className={`prose prose-sm prose-blue prose-a:text-blue-600 prose-a:underline leading-normal break-words ${message.role === "user" ? "text-white" : "text-gray-900"}`}>
                         {message.role === "assistant" ? (
                           <MarkdownMessage>{message.content}</MarkdownMessage>
                         ) : (
