@@ -39,25 +39,6 @@ class FeedbackRequest(BaseModel):
     feedback: str  # 'up' or 'down'
     content: str
 
-# Add a simple ambiguous question detector
-AMBIGUOUS_KEYWORDS = [
-    "this", "that", "thing", "stuff", "something", "anything", "everything", "details", "info", "information", "etc", "tell me more", "explain more", "more info", "more information"
-]
-
-def is_ambiguous_question(question: str) -> bool:
-    q = question.strip().lower()
-    # Flag as ambiguous if it's just gibberish or a single non-alphabetic word
-    if len(q.split()) == 1 and not q.isalpha():
-        return True
-    # If the question is only a vague word or phrase
-    for word in AMBIGUOUS_KEYWORDS:
-        if q == word or q.startswith(word):
-            return True
-    # If the question is too short (1 word) and not a known valid question
-    if len(q.split()) < 2:
-        return True
-    return False
-
 @app.post("/chat")
 async def chat(request: Request):
     try:
@@ -79,17 +60,6 @@ async def chat(request: Request):
 
         async def generate_response_stream():
             try:
-                # Ambiguous question check
-                if is_ambiguous_question(chat_request.message):
-                    ambiguous_response = "Your question is too ambiguous. Please provide more details so I can assist you better."
-                    yield f"data: {json.dumps({'type': 'text', 'content': ambiguous_response})}\n\n"
-                    print(f"Yielding ambiguous: {ambiguous_response}")
-                    return
-
-                # Removed initial 'Stream started.' message
-                # yield f"data: {json.dumps({'type': 'text', 'content': 'Stream started.'})}\n\n"
-                # print("DEBUG: Initial 'Stream started.' message yielded.")
-
                 user_input_lower = chat_request.message.lower()
                 if user_input_lower in GREETING_RESPONSES:
                     # Send greeting in SSE format with type 'text'
