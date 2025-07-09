@@ -69,4 +69,17 @@ def add_to_vector_collection(splits: list[Document], collection_name: str) -> in
         metadatas=[s.metadata for s in splits],
         ids=[f"doc_{collection_name}_{i}" for i in range(len(splits))],
     )
-    return len(splits) 
+    return len(splits)
+
+def list_uploaded_documents() -> list:
+    """Return a list of unique uploaded document sources (filenames) from the vector collection."""
+    collection = get_vector_collection()
+    # Retrieve all metadatas (limit=None gets all)
+    results = collection.get(include=["metadatas"], limit=None)
+    metadatas = results.get("metadatas", [])
+    sources = set()
+    for meta in metadatas:
+        # Each meta is a dict, may have 'source' key
+        if isinstance(meta, dict) and "source" in meta:
+            sources.add(meta["source"])
+    return list(sources) 

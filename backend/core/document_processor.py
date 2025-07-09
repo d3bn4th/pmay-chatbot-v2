@@ -8,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 # Add imports for semantic chunking
 try:
     from langchain_experimental.text_splitter import SemanticChunker
-    from langchain_openai.embeddings import OpenAIEmbeddings
+    from langchain_community.embeddings import OllamaEmbeddings
     SEMANTIC_CHUNKING_AVAILABLE = True
 except ImportError:
     SEMANTIC_CHUNKING_AVAILABLE = False
@@ -32,7 +32,9 @@ def process_document(file_content: bytes, filename: str, chunking_method: str = 
         # Semantic chunking (default)
         if chunking_method == "semantic" and SEMANTIC_CHUNKING_AVAILABLE:
             try:
-                text_splitter = SemanticChunker(OpenAIEmbeddings())
+                # Use the same embedding model as the vector store for consistency
+                embeddings = OllamaEmbeddings(model="nomic-embed-text:latest")
+                text_splitter = SemanticChunker(embeddings)
                 splits = text_splitter.split_documents(documents)
                 return splits
             except Exception as e:

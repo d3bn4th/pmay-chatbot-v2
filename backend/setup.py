@@ -13,6 +13,7 @@ setup(
         "ollama",
         "sentence-transformers",
         "torch",
+        "scikit-learn>=1.3.0",
     ],
     python_requires=">=3.8",
 ) 

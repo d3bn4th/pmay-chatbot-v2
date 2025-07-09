@@ -10,8 +10,9 @@ import uuid
 import os
 from core.vector_store import query_collection, add_to_vector_collection
 from core.document_processor import process_document
-from core.llm import re_rank_cross_encoders, call_llm
-from core.constants import SYSTEM_PROMPT, GREETING_RESPONSES
+from core.llm import re_rank_cross_encoders, call_llm, call_llm_with_self_consistency
+from core.constants import SYSTEM_PROMPT
+from core.config import update_self_consistency_config, get_self_consistency_config, validate_config
 
 app = FastAPI(title="PMAY Chatbot API")
 
@@ -39,6 +40,14 @@ class FeedbackRequest(BaseModel):
     feedback: str  # 'up' or 'down'
     content: str
 
+class SelfConsistencyConfigRequest(BaseModel):
+    enable_self_consistency: Optional[bool] = None
+    num_candidates: Optional[int] = None
+    similarity_threshold: Optional[float] = None
+    min_cluster_size: Optional[int] = None
+    temperature_variation: Optional[bool] = None
+    prompt_variations: Optional[bool] = None
+
 @app.post("/chat")
 async def chat(request: Request):
     try:
@@ -61,12 +70,7 @@ async def chat(request: Request):
         async def generate_response_stream():
             try:
                 user_input_lower = chat_request.message.lower()
-                if user_input_lower in GREETING_RESPONSES:
-                    # Send greeting in SSE format with type 'text'
-                    yield f"data: {json.dumps({'type': 'text', 'content': GREETING_RESPONSES[user_input_lower]})}\n\n"
-                    print(f"Yielding greeting: {GREETING_RESPONSES[user_input_lower]}")
-                    return
-
+                
                 # Get documents from vector store
                 results = query_collection(chat_request.message)
                 documents = results.get("documents", [])
@@ -101,8 +105,8 @@ async def chat(request: Request):
                     print(f"Yielding no relevant text: {no_info_response}")
                     return
 
-                # Stream the LLM response
-                async for chunk in call_llm(relevant_text, chat_request.message, SYSTEM_PROMPT):
+                # Stream the LLM response with self-consistency prompting
+                async for chunk in call_llm_with_self_consistency(relevant_text, chat_request.message, SYSTEM_PROMPT):
                     # print(f"DEBUG: Processing chunk from LLM: {chunk[:50]}...") # Log first 50 chars of chunk
                     # Send each chunk in SSE format with type 'text'
                     sse_message = f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
@@ -170,6 +174,53 @@ async def feedback(feedback: FeedbackRequest):
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+@app.get("/config/self-consistency")
+async def get_self_consistency_config_endpoint():
+    """Get current self-consistency configuration."""
+    try:
+        config = get_self_consistency_config()
+        is_valid, error_message = validate_config()
+        return {
+            "config": config,
+            "is_valid": is_valid,
+            "error_message": error_message if not is_valid else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/config/self-consistency")
+async def update_self_consistency_config_endpoint(request: SelfConsistencyConfigRequest):
+    """Update self-consistency configuration."""
+    try:
+        # Extract non-None values from request
+        config_updates = {}
+        for field, value in request.dict().items():
+            if value is not None:
+                config_updates[field] = value
+        
+        if not config_updates:
+            raise HTTPException(status_code=400, detail="No configuration updates provided")
+        
+        # Update configuration
+        update_self_consistency_config(**config_updates)
+        
+        # Validate updated configuration
+        is_valid, error_message = validate_config()
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"Invalid configuration: {error_message}")
+        
+        # Return updated configuration
+        config = get_self_consistency_config()
+        return {
+            "message": "Configuration updated successfully",
+            "config": config,
+            "is_valid": is_valid
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 

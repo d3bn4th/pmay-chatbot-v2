@@ -51,7 +51,7 @@ class DocumentUploader:
             try:
                 with open(file_path, 'rb') as file:
                     files = {'file': (os.path.basename(file_path), file, 'application/pdf')}
-                    response = requests.post(self.api_url, files=files, timeout=60) # Add timeout
+                    response = requests.post(self.api_url, files=files, timeout=300) # Add timeout
 
                 if response.status_code == 200:
                     result = response.json()

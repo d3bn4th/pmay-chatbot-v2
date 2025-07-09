@@ -38,12 +38,23 @@ export default function ChatPage() {
   const [isAssistantStreaming, setIsAssistantStreaming] = useState(false)
   const [feedbackSent, setFeedbackSent] = useState<{ [id: string]: boolean }>({})
   const [selectedLanguage, setSelectedLanguage] = useState("en")
+  const [showSampleQuestions, setShowSampleQuestions] = useState(false);
+
+  // Sample questions to display
+  const sampleQuestions = [
+    "What is PMAY?",
+    "How do I check my eligibility?",
+    "How can I apply for PMAY?",
+    "What documents are required?",
+    "How do I check my application status?"
+  ];
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isMobile = useMobile()
   const [showSidebar, setShowSidebar] = useState(!isMobile)
   const [activeSection, setActiveSection] = useState("home")
   const [userMessageCount, setUserMessageCount] = useState(0); // New state to trigger scroll
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     setShowSidebar(!isMobile)
@@ -62,6 +73,40 @@ export default function ChatPage() {
       // console.error("Chat error object:", error) // Changed from useChat error
     }
   }, [error])
+
+  useEffect(() => {
+    // Only show on first visit and if no messages have been sent
+    if (typeof window !== 'undefined') {
+      const hasVisited = localStorage.getItem('pmay_has_visited');
+      if (!hasVisited && messages.length === 0) {
+        setShowSampleQuestions(true);
+      }
+    }
+  }, [messages.length]);
+
+  const handleSampleQuestionClick = (question: string) => {
+    setInput(question);
+    setShowSampleQuestions(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pmay_has_visited', 'true');
+    }
+    // Auto-submit after setting input
+    setTimeout(() => {
+      if (formRef.current) {
+        formRef.current.requestSubmit();
+      }
+    }, 0);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+    if (showSampleQuestions) {
+      setShowSampleQuestions(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pmay_has_visited', 'true');
+      }
+    }
+  };
 
   const showWelcomeMessage = messages.length === 0 && !isLoading && !error
 
@@ -506,11 +551,26 @@ export default function ChatPage() {
 
         {/* Input Area (fixed at bottom) */}
         <div className="border-t border-gray-200 p-4 bg-gray-50 shrink-0">
-          <form onSubmit={handleSubmit} className="flex w-full items-center gap-3">
+          {/* Sample Questions (first visit, no messages) */}
+          {showSampleQuestions && messages.length === 0 && !isLoading && !error && (
+            <div className="mb-4 flex flex-wrap gap-2 justify-center animate-fade-in-slide-up">
+              {sampleQuestions.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium rounded-full px-4 py-2 shadow-sm border border-blue-200 transition-all duration-150"
+                  onClick={() => handleSampleQuestionClick(q)}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+          <form ref={formRef} onSubmit={handleSubmit} className="flex w-full items-center gap-3">
             <Input
               placeholder="Ask about PMAY scheme..."
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               className="flex-1 bg-white border-gray-300 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 text-gray-900 placeholder:text-gray-500 rounded-lg py-3 px-4"
               disabled={isLoading}
               aria-label="Chat input"
