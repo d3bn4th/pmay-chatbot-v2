@@ -15,11 +15,11 @@ SELF_CONSISTENCY_CONFIG = {
 
 # LLM configuration
 LLM_CONFIG = {
-    "model": "llama3.2:3b",
+    "model": "llama3.2:3b", #   # gaganyatri/sarvam-2b-v0.5:latest
     "max_tokens": 1000,
     "num_gpu": 1,
     "num_thread": 4,
-    "base_temperature": 0.7,
+    "base_temperature": 0.3,
     "temperature_range": 0.4,  # Range for temperature variation
 }
 
