@@ -22,7 +22,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/mohua-logo.svg" type="image/svg+xml" />
       </head>
-      <body className={inter.className}>
+      <body className={inter.className + " bg-[#FAFAF6]"}>
         <ThemeProvider defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>

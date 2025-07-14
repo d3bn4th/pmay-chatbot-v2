@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages, model } = await req.json();
 
     const lastUserMessage = messages.findLast((message: CoreMessage) => message.role === 'user');
 
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ message: lastUserMessage.content }),
+      body: JSON.stringify({ message: lastUserMessage.content, model }),
     });
 
     if (!backendResponse.ok) {

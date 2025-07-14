@@ -66,7 +66,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$serv
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
 async function POST(req) {
     try {
-        const { messages } = await req.json();
+        const { messages, model } = await req.json();
         const lastUserMessage = messages.findLast((message)=>message.role === 'user');
         if (!lastUserMessage) {
             return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json({
@@ -82,7 +82,8 @@ async function POST(req) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: lastUserMessage.content
+                message: lastUserMessage.content,
+                model
             })
         });
         if (!backendResponse.ok) {

@@ -3,13 +3,15 @@
 import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Input } from "@/components/ui/input"
-import { Loader2, Send, Info, Home, FileText, Settings, Menu, ArrowLeft, ThumbsUp, ThumbsDown } from "lucide-react"
+import { Loader2, Info, Home, FileText, Settings, ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { SourceDocument, SourceDocuments } from "@/components/source-documents"
 import { useMobile } from "@/hooks/use-mobile"
 import MarkdownMessage from "@/components/markdown-message"
 import { LanguageSelector } from "@/components/language-selector"
+import DocumentUpload from "@/components/document-upload";
+import { ModelSelector } from "@/components/model-selector";
+import SidebarQuickLinks from "@/components/sidebar-quick-links";
 
 // Define a custom message type that includes an 'id' and optional sources
 interface ChatMessageType {
@@ -30,24 +32,31 @@ const ThinkingDots = () => {
   );
 };
 
+// Add this above the ChatPage component
+const SAMPLE_QUESTIONS = [
+  "What is PMAY?",
+  "How to apply for PMAY?",
+  "What is the eligibility criteria?",
+  "What is Pradhan Mantri Awas Yojana (Urban) and its objectives and scope?",
+  "What is In-Situ Slum Redevelopment?",
+  "What is Credit Linked Subsidy Scheme (CLSS)?",
+  "What is Affordable Housing in Partnership (AHP)?",
+  "What is Beneficiary led individual house construction enhancements (BLC)?",
+  "Who is defined as a beneficiary under Pradhan Mantri Awas Yojana (Urban) Scheme?",
+];
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [isAssistantStreaming, setIsAssistantStreaming] = useState(false)
-  const [feedbackSent, setFeedbackSent] = useState<{ [id: string]: boolean }>({})
   const [selectedLanguage, setSelectedLanguage] = useState("en")
   const [showSampleQuestions, setShowSampleQuestions] = useState(false);
-
-  // Sample questions to display
-  const sampleQuestions = [
-    "What is PMAY?",
-    "How do I check my eligibility?",
-    "How can I apply for PMAY?",
-    "What documents are required?",
-    "How do I check my application status?"
-  ];
+  // New state for abort controller and last user message
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [lastUserMessage, setLastUserMessage] = useState<ChatMessageType | null>(null);
+  const [selectedModel, setSelectedModel] = useState("llama3.2:1b");
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isMobile = useMobile()
@@ -84,20 +93,6 @@ export default function ChatPage() {
     }
   }, [messages.length]);
 
-  const handleSampleQuestionClick = (question: string) => {
-    setInput(question);
-    setShowSampleQuestions(false);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pmay_has_visited', 'true');
-    }
-    // Auto-submit after setting input
-    setTimeout(() => {
-      if (formRef.current) {
-        formRef.current.requestSubmit();
-      }
-    }, 0);
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
     if (showSampleQuestions) {
@@ -110,76 +105,66 @@ export default function ChatPage() {
 
   const showWelcomeMessage = messages.length === 0 && !isLoading && !error
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
-
-    const userMessage: ChatMessageType = {
+  const handleSubmit = async (e?: React.FormEvent<HTMLFormElement>, overrideMessage?: ChatMessageType) => {
+    if (e) e.preventDefault();
+    const messageToSend = overrideMessage || {
       id: Date.now().toString(),
       role: 'user',
       content: input,
+    };
+    if (!messageToSend.content.trim() || isLoading) return;
+
+    if (!overrideMessage) {
+      setMessages((prevMessages) => [...prevMessages, messageToSend]);
+      setInput('');
+      setUserMessageCount(prevCount => prevCount + 1); // Increment to trigger scroll
     }
-
-    setMessages((prevMessages) => [...prevMessages, userMessage])
-    setInput('')
-    setIsLoading(true)
-    setError(null)
-    setUserMessageCount(prevCount => prevCount + 1); // Increment to trigger scroll
-
-    const newAssistantMessageId = `ai-response-${Date.now()}`
-
+    setIsLoading(true);
+    setError(null);
+    setLastUserMessage(messageToSend);
+    const newAbortController = new AbortController();
+    setAbortController(newAbortController);
+    const newAssistantMessageId = `ai-response-${Date.now()}`;
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages: [userMessage] }),
-      })
-
+        body: JSON.stringify({ messages: [messageToSend], model: selectedModel }),
+        signal: newAbortController.signal,
+      });
       if (!response.ok || !response.body) {
-        const errorText = await response.text()
-        throw new Error(`API request failed with status ${response.status}: ${errorText}`)
+        const errorText = await response.text();
+        throw new Error(`API request failed with status ${response.status}: ${errorText}`);
       }
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let assistantResponseContent = ''
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantResponseContent = '';
       let assistantSources: SourceDocument[] = [];
-
+      setIsAssistantStreaming(true);
       while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        // console.log('Frontend: Raw chunk received:', chunk.length, 'bytes')
-        const sseMessages = chunk.split('\n\n').filter(msg => msg.startsWith('data: ')).map(msg => msg.substring(6))
-
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const sseMessages = chunk.split('\n\n').filter(msg => msg.startsWith('data: ')).map(msg => msg.substring(6));
         for (const sseMessage of sseMessages) {
-          // console.log('Frontend: Processing SSE message:', sseMessage)
           try {
-            const parsedData = JSON.parse(sseMessage)
-            // console.log('Frontend: Parsed SSE data:', parsedData)
-            
+            const parsedData = JSON.parse(sseMessage);
             if (parsedData.type === 'text') {
               const content = parsedData.content;
               if (content) {
                 assistantResponseContent += content;
-                if (!isAssistantStreaming) {
-                  setIsAssistantStreaming(true);
-                }
               }
             } else if (parsedData.type === 'sources') {
               if (parsedData.sources) {
                 assistantSources = parsedData.sources;
               }
             }
-
             setMessages((prevMessages) => {
               const existingAssistantMessageIndex = prevMessages.findIndex(
                 (msg) => msg.id === newAssistantMessageId
               );
-
               if (existingAssistantMessageIndex !== -1) {
                 // Update existing assistant message
                 return prevMessages.map((msg, index) =>
@@ -201,74 +186,105 @@ export default function ChatPage() {
               }
             });
           } catch (jsonError) {
-            console.error('Failed to parse SSE message:', sseMessage, jsonError)
+            console.error('Failed to parse SSE message:', sseMessage, jsonError);
           }
         }
       }
-    } catch (err) {
-      console.error('Error during streaming:', err)
-      setError(err instanceof Error ? err : new Error('An unknown error occurred.'))
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: 'I apologize, but I encountered an error while processing your request. Please try again.',
-        },
-      ])
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: 'Response stopped by user.',
+          },
+        ]);
+      } else if (err instanceof Error) {
+        console.error('Error during streaming:', err);
+        setError(err);
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: 'I apologize, but I encountered an error while processing your request. Please try again.',
+          },
+        ]);
+      } else {
+        setError(new Error('An unknown error occurred.'));
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: 'I apologize, but I encountered an error while processing your request. Please try again.',
+          },
+        ]);
+      }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
       setIsAssistantStreaming(false);
+      setAbortController(null);
     }
-  }
+  };
 
-  async function handleFeedback(messageId: string, feedback: "up" | "down", content: string) {
-    try {
-      await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_id: messageId, feedback, content }),
-      });
-      setFeedbackSent((prev) => ({ ...prev, [messageId]: true }));
-      setTimeout(() => setFeedbackSent((prev) => ({ ...prev, [messageId]: false })), 2000);
-    } catch {
-      alert("Failed to send feedback.");
+  // Stop response handler
+  const handleStopResponse = () => {
+    if (abortController) {
+      abortController.abort();
     }
-  }
+  };
+
+  // Regenerate response handler
+  const handleRegenerate = () => {
+    if (lastUserMessage) {
+      handleSubmit(undefined, lastUserMessage);
+    }
+  };
+
+  // Add handler for sample question click
+  const handleSampleQuestionClick = (question: string) => {
+    setInput(question);
+    if (showSampleQuestions) {
+      setShowSampleQuestions(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pmay_has_visited', 'true');
+      }
+    }
+    // Optionally focus the input
+    formRef.current?.querySelector('input')?.focus();
+    // Submit the form programmatically after setting input
+    setTimeout(() => {
+      if (formRef.current) {
+        formRef.current.requestSubmit();
+      }
+    }, 0);
+  };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-[#FAFAF6]">
       {/* Sidebar */}
       <div
         className={`fixed top-0 left-0 h-screen z-50 ${
-          showSidebar ? "w-64" : "w-0 -ml-64"
+          showSidebar ? "w-80" : "w-0 -ml-80"
         } bg-blue-800 text-white transition-all duration-300 ease-in-out overflow-hidden
         ${isMobile ? "shadow-xl" : ""}`}
       >
         <div className="p-4 h-full flex flex-col">
           {/* Desktop-only: MoHUA and PMAY logos above the title */}
-          <div className="hidden lg:flex flex-col items-center mb-4">
-            <div className="bg-white rounded-lg shadow p-2 flex items-center space-x-2 mb-2">
-              <Image
-                src="/mohua-logo-removebgpng.png"
-                alt="MoHUA Logo"
-                width={48}
-                height={48}
-                className="h-12 w-auto"
-                priority
-              />
-              <Image
-                src="/pmay-logo.svg"
-                alt="PMAY Logo"
-                width={48}
-                height={48}
-                className="h-12 w-auto"
-                priority
-              />
-            </div>
+          <div className="hidden lg:flex justify-center items-center mb-4">
+            <Image
+              src="/pmay-logo-new.png"
+              alt="PMAY Logo"
+              width={300}
+              height={200}
+              className="object-contain rounded-lg shadow bg-white p-2"
+              priority
+            />
           </div>
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-lg font-bold w-full text-center">PMAY Chatbot</h1>
+            <h1 className="text-xl font-bold w-full text-center">PMAY Chatbot</h1>
             {isMobile && (
               <Button
                 variant="ghost"
@@ -284,7 +300,7 @@ export default function ChatPage() {
           <nav className="space-y-1 mb-6">
             <Button
               variant="ghost"
-              className={`w-full justify-start text-white hover:bg-blue-700 ${
+              className={`w-full justify-start text-white hover:bg-blue-700 text-base ${
                 activeSection === "home" ? "bg-blue-700" : ""
               }`}
               onClick={() => setActiveSection("home")}
@@ -294,8 +310,8 @@ export default function ChatPage() {
             </Button>
             <Button
               variant="ghost"
-              className={`w-full justify-start text-white hover:bg-blue-700 ${
-                activeSection === "documents" ? "bg-blue-700" : ""
+              className={`w-full justify-start text-white hover:bg-blue-700 text-base ${
+                activeSection === "documents" ? "bg-blue-700" : "" 
               }`}
               onClick={() => setActiveSection("documents")}
             >
@@ -304,8 +320,8 @@ export default function ChatPage() {
             </Button>
             <Button
               variant="ghost"
-              className={`w-full justify-start text-white hover:bg-blue-700 ${
-                activeSection === "settings" ? "bg-blue-700" : ""
+              className={`w-full justify-start text-white hover:bg-blue-700 text-base ${
+                activeSection === "settings" ? "bg-blue-700" : "" 
               }`}
               onClick={() => setActiveSection("settings")}
             >
@@ -313,278 +329,253 @@ export default function ChatPage() {
               Settings
             </Button>
           </nav>
-          {/* Language Selector directly below nav (below Settings) */}
-          <div className="mb-6">
-            <LanguageSelector
-              selectedLanguage={selectedLanguage}
-              onLanguageChange={setSelectedLanguage}
-            />
-          </div>
+          {/* Show DocumentUpload in sidebar when Documents is selected */}
+          {activeSection === "documents" && (
+            <div className="mt-2">
+              <h2 className="text-lg font-semibold mb-4">Upload Documents</h2>
+              <DocumentUpload />
+            </div>
+          )}
+          {/* Language Selector and Model Selector only in Settings */}
+          {activeSection === "settings" && (
+            <>
+              <div className="mb-8 px-2 pl-2">
+                <LanguageSelector
+                  selectedLanguage={selectedLanguage}
+                  onLanguageChange={setSelectedLanguage}
+                />
+              </div>
+              <div className="mb-8 px-2 pl-2">
+                <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+              </div>
+            </>
+          )}
 
           {/* Dynamic Content Based on Active Section */}
           <div className="flex-1 overflow-y-auto">
             {activeSection === "home" && (
-              <div className="space-y-4">
-                <div className="text-sm text-blue-200">
-                  <h3 className="font-semibold mb-2">Quick Actions</h3>
-                  <ul className="space-y-1 text-xs">
-                    <li>• Ask about PMAY eligibility</li>
-                    <li>• Check application status</li>
-                    <li>• Learn about benefits</li>
-                    <li>• Find nearest office</li>
-                  </ul>
-                </div>
-              </div>
+              <SidebarQuickLinks />
             )}
           </div>
+          {/* Remove QuickActions from here */}
         </div>
       </div>
 
       {/* Main Content */}
-      <div className={`flex-1 flex flex-col h-full ${!isMobile && showSidebar ? "ml-64" : "ml-0"}`}>
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm shrink-0 relative h-20">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="lg:hidden"
-            onClick={() => setShowSidebar(!showSidebar)}
-          >
-            <Menu className="h-6 w-6" />
-          </Button>
-
-          {/* Mobile-only: MoHUA and PMAY logos in the top bar */}
-          <div className="flex items-center space-x-2 flex lg:hidden absolute left-1/2 -translate-x-1/2">
-            <div className="bg-white rounded-lg shadow p-2 flex items-center space-x-2">
-              <Image
-                src="/mohua-logo-removebgpng.png"
-                alt="MoHUA Logo"
-                width={40}
-                height={40}
-                className="h-10 w-auto"
-                priority
-              />
-              <Image
-                src="/pmay-logo.svg"
-                alt="PMAY Logo"
-                width={40}
-                height={40}
-                className="h-10 w-auto"
-                priority
-              />
-            </div>
-          </div>
-
-          {/* Removed logo images from header for desktop view */}
-          <div className="flex-1 hidden lg:block"></div>
-
-          {/* Right-aligned content (e.g., existing user avatar or settings) */}
-          <div className="flex items-center space-x-4">
-            {/* Add any other right-aligned header content here if it exists in the original header */}
-          </div>
-        </header>
-
-        {/* Scrollable Chat Messages Area */}
-        <div className="flex-1 overflow-y-auto">
-          <div
-            className={`flex flex-col px-4 md:px-6 bg-white pt-6 pb-8
-            ${showWelcomeMessage ? "items-center justify-center" : "items-stretch justify-start"}`}
-          >
-            {/* Welcome Message Section */}
-            {showWelcomeMessage && (
-              <div className="text-center p-8">
-                <div className="space-y-4 mt-4">
-                  <div className="mx-auto p-2 bg-gradient-to-br from-orange-100 to-green-100 rounded-full border-2 border-orange-200 shadow-lg w-40 h-40 flex items-center justify-center">
-                    <div className="flex items-center space-x-4">
-                      <Image
-                        src="/mohua-logo-removebgpng.png"
-                        alt="MoHUA Logo"
-                        width={65}
-                        height={65}
-                        className="object-contain"
-                      />
-                      <Image
-                        src="/pmay-logo.svg"
-                        alt="PMAY Logo"
-                        width={65}
-                        height={65}
-                        className="object-contain"
-                      />
-                    </div>
-                  </div>
-                  
-                  <h3 className="text-3xl font-bold text-blue-800">PMAY Chatbot</h3>
-                  <p className="text-lg text-gray-600 max-w-md mx-auto">
-                    Ask questions about the Pradhan Mantri Awas Yojana (PMAY) scheme and get accurate,
-                    context-aware responses.
-                  </p>
-                  <div className="flex items-center justify-center mt-3">
-                    <Info className="h-4 w-4 text-blue-600 mr-2" />
-                    <span className="text-sm text-blue-600">Powered by RAG with cross-encoder re-ranking</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Initial Loading Spinner */}
-            {isLoading && messages.length === 0 && (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
-              </div>
-            )}
-
-            {/* Error Message */}
-            {error && (
-              <div className="flex-1 flex items-center justify-center text-center p-8">
-                <div className="space-y-3 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                  <svg
-                    className="h-12 w-12 mx-auto text-red-500"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.1-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                  <h3 className="text-xl font-semibold">Oops! Something went wrong.</h3>
-                  <p className="text-sm">{error.message || "Please try again later."}</p>
-                  <Button onClick={() => window.location.reload()} variant="destructive" size="sm">
-                    Refresh
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Messages List */}
-            {messages.length > 0 && (
-              <div className="space-y-6 w-full">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"} animate-fade-in-slide-up`}
-                  >
-                    {message.role === "assistant" && (
-                      <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
-                        <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
-                          <Image
-                            src="/bot-avatar.png"
-                            alt="bot-avatar"
-                            width={30}
-                            height={30}
-                            className="rounded-full"
-                          />
-                        </div>
-                      </Avatar>
-                    )}
-                    <div
-                      className={`relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 ${message.role === "user" ? "bg-blue-700 text-white" : "bg-gray-100 text-gray-800"}`}
-                    >
-                      <div className={`prose prose-sm prose-blue prose-a:text-blue-600 prose-a:underline leading-normal break-words ${message.role === "user" ? "text-white" : "text-gray-900"}`}>
-                        {message.role === "assistant" ? (
-                          <MarkdownMessage>{message.content}</MarkdownMessage>
-                        ) : (
-                          message.content
-                        )}
-                      </div>
-                      {message.sources && message.sources.length > 0 && message.role !== "user" && (
-                        <SourceDocuments documents={message.sources} />
-                      )}
-                      {/* Thumbs up/down for assistant messages */}
-                      {message.role === "assistant" && (
-                        <div className="absolute bottom-2 right-2 flex gap-1">
-                          <button
-                            className="bg-white/80 hover:bg-green-100 border border-green-200 rounded-full p-1 shadow transition"
-                            title="Thumbs up"
-                            disabled={feedbackSent[message.id]}
-                            onClick={() => handleFeedback(message.id, "up", message.content)}
-                          >
-                            <ThumbsUp className="h-4 w-4 text-green-600" />
-                          </button>
-                          <button
-                            className="bg-white/80 hover:bg-red-100 border border-red-200 rounded-full p-1 shadow transition"
-                            title="Thumbs down"
-                            disabled={feedbackSent[message.id]}
-                            onClick={() => handleFeedback(message.id, "down", message.content)}
-                          >
-                            <ThumbsDown className="h-4 w-4 text-red-600" />
-                          </button>
-                          {feedbackSent[message.id] && (
-                            <span className="ml-2 text-xs text-green-600">Thank you!</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {message.role === "user" && (
-                      <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
-                        <AvatarFallback className="bg-gray-300 text-gray-800 text-xs">You</AvatarFallback>
-                      </Avatar>
-                    )}
-                  </div>
-                ))}
-                {isLoading && !isAssistantStreaming && (
-                  <div className="flex items-start gap-3">
-                    <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
-                      <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
+      <div className={`flex-1 flex flex-col h-full ${!isMobile && showSidebar ? "ml-80" : "ml-0"} bg-[#FAFAF6]`}>
+        {/* Centered Chat Card */}
+        <div className="flex-1 flex flex-col items-center">
+          <div className="w-full max-w-5xl flex flex-col flex-1 h-full bg-[#FAFAF6] rounded-2xl p-8 relative">
+            {/* Scrollable Chat Messages Area */}
+            <div className="flex-1 overflow-auto pb-32 bg-[#FAFAF6]"> {/* Reduced bottom padding for tighter spacing */}
+              <div
+                className={`flex flex-col px-4 md:px-6 bg-[#FAFAF6] pt-6 pb-8
+                ${showWelcomeMessage ? "items-center justify-center" : "items-stretch justify-start"}`}
+              >
+                {/* Welcome Message Section */}
+                {showWelcomeMessage && (
+                  <div className="text-center p-8">
+                    <div className="space-y-4 mt-2">
+                      <div className="mx-auto bg-white border-2 border-orange-200 shadow-lg w-44 h-44 flex items-center justify-center rounded-full overflow-hidden">
                         <Image
-                          src="/bot-avatar.png"
-                          alt="bot-avatar"
-                          width={30}
-                          height={30}
-                          className="rounded-full"
+                          src="/chatbot-logo.png"
+                          alt="Chatbot Logo"
+                          width={140}
+                          height={140}
+                          className="object-contain mx-auto"
+                          style={{ maxHeight: '90%', maxWidth: '90%' }}
                         />
                       </div>
-                    </Avatar>
-                    <div className="relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 bg-gray-100 text-gray-800">
-                      <ThinkingDots />
+                      
+                      <h3 className="text-3xl font-bold text-blue-800">PMAY Chatbot</h3>
+                      <p className="text-lg text-gray-600 max-w-md mx-auto">
+                        Ask questions about the Pradhan Mantri Awas Yojana (PMAY) scheme and get accurate,
+                        context-aware responses.
+                      </p>
+                      <div className="flex items-center justify-center mt-3">
+                        <Info className="h-4 w-4 text-blue-600 mr-2" />
+                        <span className="text-sm text-blue-600">Powered by RAG with cross-encoder re-ranking</span>
+                      </div>
                     </div>
                   </div>
                 )}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Input Area (fixed at bottom) */}
-        <div className="border-t border-gray-200 p-4 bg-gray-50 shrink-0">
-          {/* Sample Questions (first visit, no messages) */}
-          {showSampleQuestions && messages.length === 0 && !isLoading && !error && (
-            <div className="mb-4 flex flex-wrap gap-2 justify-center animate-fade-in-slide-up">
-              {sampleQuestions.map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium rounded-full px-4 py-2 shadow-sm border border-blue-200 transition-all duration-150"
-                  onClick={() => handleSampleQuestionClick(q)}
-                >
-                  {q}
-                </button>
-              ))}
+                {/* Initial Loading Spinner */}
+                {isLoading && messages.length === 0 && (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
+                  </div>
+                )}
+
+                {/* Error Message */}
+                {error && (
+                  <div className="flex-1 flex items-center justify-center text-center p-8">
+                    <div className="space-y-3 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                      <svg
+                        className="h-12 w-12 mx-auto text-red-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.1-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                      <h3 className="text-xl font-semibold">Oops! Something went wrong.</h3>
+                      <p className="text-sm">{error.message || "Please try again later."}</p>
+                      <Button onClick={() => window.location.reload()} variant="destructive" size="sm">
+                        Refresh
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Messages List */}
+                {messages.length > 0 && (
+                  <div className="space-y-6 w-full">
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex items-start gap-3 ${message.role === "user" ? "justify-end" : "justify-start"} animate-fade-in-slide-up`}
+                      >
+                        {message.role === "assistant" && (
+                          <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
+                            <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
+                              <Image
+                                src="/chatbot-avatar.png"
+                                alt="bot-avatar"
+                                width={30}
+                                height={30}
+                                className="rounded-full"
+                              />
+                            </div>
+                          </Avatar>
+                        )}
+                        <div
+                          className={`relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 ${message.role === "user" ? "bg-blue-700 text-white" : "bg-gray-100 text-gray-800"}`}
+                        >
+                          <div className={`prose prose-sm prose-blue prose-a:text-blue-600 prose-a:underline leading-normal break-words ${message.role === "user" ? "text-white" : "text-gray-900"}`}>
+                            {message.role === "assistant" ? (
+                              <MarkdownMessage>{message.content}</MarkdownMessage>
+                            ) : (
+                              message.content
+                            )}
+                          </div>
+                          {message.sources && message.sources.length > 0 && message.role !== "user" && (
+                            <SourceDocuments documents={message.sources} />
+                          )}
+                          {/* Thumbs up/down for assistant messages */}
+                          {message.role === "assistant" && (
+                            <></>
+                          )}
+                        </div>
+                        {message.role === "user" && (
+                          <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
+                            <AvatarFallback className="bg-gray-300 text-gray-800 text-xs">You</AvatarFallback>
+                          </Avatar>
+                        )}
+                      </div>
+                    ))}
+                    {isLoading && !isAssistantStreaming && (
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
+                          <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
+                            <Image
+                              src="/bot-avatar.png"
+                              alt="bot-avatar"
+                              width={30}
+                              height={30}
+                              className="rounded-full"
+                            />
+                          </div>
+                        </Avatar>
+                        <div className="relative w-fit overflow-hidden max-w-[80%] rounded-lg px-4 pb-2 pt-3 bg-gray-100 text-gray-800">
+                          <ThinkingDots />
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <form ref={formRef} onSubmit={handleSubmit} className="flex w-full items-center gap-3">
-            <Input
-              placeholder="Ask about PMAY scheme..."
-              value={input}
-              onChange={handleInputChange}
-              className="flex-1 bg-white border-gray-300 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 text-gray-900 placeholder:text-gray-500 rounded-lg py-3 px-4"
-              disabled={isLoading}
-              aria-label="Chat input"
-            />
-            <Button
-              type="submit"
-              size="lg"
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-3 shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 disabled:bg-blue-400 disabled:transform-none disabled:shadow-none"
-              disabled={isLoading || !input.trim()}
-              aria-label="Send message"
-            >
-              {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-            </Button>
-          </form>
+            {/* White background to hide chat below input */}
+            <div className="fixed bottom-0 left-0 right-0 h-24 bg-[#FAFAF6] z-40" />
+            {/* Sample Questions Bar */}
+            <div className="fixed bottom-24 left-74 right-0 z-50 px-4 mb-0 pointer-events-none">
+              <div className="mx-auto w-full max-w-3xl flex gap-3 overflow-x-auto pointer-events-auto py-1 px-2 scrollbar-none" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {SAMPLE_QUESTIONS.map((q, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="whitespace-nowrap bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 rounded-full px-6 py-3 text-sm font-medium shadow transition focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    onClick={() => handleSampleQuestionClick(q)}
+                    tabIndex={0}
+                    style={{ marginTop: 4, marginBottom: 4 }}
+                  >
+                    {q}
+                  </button>
+                ))}
+                <style>{`.scrollbar-none::-webkit-scrollbar { display: none; } .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }`}</style>
+              </div>
+            </div>
+            {/* Centered, rectangle chat input at the bottom of the viewport */}
+            <div className="fixed bottom-0 left-74 right-0 z-50 px-4 mb-4 pointer-events-none">
+              <form ref={formRef} onSubmit={handleSubmit} className="mx-auto flex items-center w-full max-w-3xl bg-white rounded-xl shadow-2xl border border-gray-100 px-6 py-3 gap-2 pointer-events-auto">
+                <input
+                  type="text"
+                  placeholder="Ask about PMAY scheme..."
+                  value={input}
+                  onChange={handleInputChange}
+                  className="flex-1 bg-transparent border-none outline-none text-gray-700 text-lg placeholder:text-gray-400 px-2"
+                  disabled={isLoading}
+                  aria-label="Chat input"
+                />
+                {/* Send or Stop Button (toggle) */}
+                {isLoading || isAssistantStreaming ? (
+                  <button
+                    type="button"
+                    onClick={handleStopResponse}
+                    aria-label="Stop response"
+                    className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none"
+                  >
+                    <span className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 hover:bg-blue-200 transition">
+                      <svg width="20" height="20" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="10" height="10" rx="2" /></svg>
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none"
+                    disabled={!input.trim()}
+                    aria-label="Send message"
+                  >
+                    <span className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 hover:bg-blue-200 transition">
+                      <svg width="24" height="24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                    </span>
+                  </button>
+                )}
+                {/* Regenerate Button */}
+                <button
+                  type="button"
+                  onClick={handleRegenerate}
+                  disabled={isLoading || !lastUserMessage}
+                  aria-label="Regenerate response"
+                  className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none"
+                >
+                  <span className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 hover:bg-blue-200 transition">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="1 4 1 10 7 10" />
+                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                  </span>
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </div>

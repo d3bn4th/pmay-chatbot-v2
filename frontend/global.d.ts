@@ -1,0 +1,1 @@
+declare module '@react-league/react-file-previewer'; 
