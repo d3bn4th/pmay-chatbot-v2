@@ -218,7 +218,7 @@ def select_majority_response(responses: List[str], clusters: List[List[int]]) ->
     
     return selected_response, metadata
 
-async def generate_candidate_responses(context: str, prompt: str, system_prompt: str, num_candidates: int = 5) -> List[str]:
+async def generate_candidate_responses(context: str, prompt: str, system_prompt: str, num_candidates: int = 5, model: str = None) -> List[str]:
     """
     Generate multiple candidate responses for self-consistency prompting.
     
@@ -261,7 +261,7 @@ async def generate_candidate_responses(context: str, prompt: str, system_prompt:
             # Generate response without streaming
             client = AsyncClient()
             response = await client.chat(
-                model="llama3.2:1b",
+                model=model or "llama3.2:1b",
                 messages=[
                     {
                         "role": "system",
@@ -292,7 +292,7 @@ async def generate_candidate_responses(context: str, prompt: str, system_prompt:
     
     return candidates
 
-async def call_llm(context: str, prompt: str, system_prompt: str):
+async def call_llm(context: str, prompt: str, system_prompt: str, model: str = None):
     """Call the LLM with the given context and prompt. This function is an async generator."""
     try:
         # Ensure context is a string
@@ -324,7 +324,7 @@ Response:"""
         # Call the LLM with streaming enabled using AsyncClient
         client = AsyncClient()
         response_stream = await client.chat(
-            model="llama3.2:1b",
+            model=model or "llama3.2:1b",
             messages=[
                 {
                     "role": "system",
@@ -363,14 +363,14 @@ Response:"""
         # In a streaming scenario, yield an error message to the frontend
         yield f"I apologize, but I encountered an error while processing your request: {str(e)}"
 
-async def call_llm_with_self_consistency(context: str, prompt: str, system_prompt: str):
+async def call_llm_with_self_consistency(context: str, prompt: str, system_prompt: str, model: str = None):
     """
     Call the LLM with self-consistency prompting.
     This function generates multiple candidate responses and selects the best one.
     """
     if not SELF_CONSISTENCY_CONFIG["enable_self_consistency"]:
         # Fall back to original single response method
-        async for chunk in call_llm(context, prompt, system_prompt):
+        async for chunk in call_llm(context, prompt, system_prompt, model=model):
             yield chunk
         return
     
@@ -382,12 +382,13 @@ async def call_llm_with_self_consistency(context: str, prompt: str, system_promp
             context, 
             prompt, 
             system_prompt, 
-            SELF_CONSISTENCY_CONFIG['num_candidates']
+            SELF_CONSISTENCY_CONFIG['num_candidates'],
+            model=model
         )
         
         if not candidates:
             # Fall back to original method if no candidates generated
-            async for chunk in call_llm(context, prompt, system_prompt):
+            async for chunk in call_llm(context, prompt, system_prompt, model=model):
                 yield chunk
             return
         
@@ -420,7 +421,7 @@ async def call_llm_with_self_consistency(context: str, prompt: str, system_promp
     except Exception as e:
         print(f"Error in self-consistency prompting: {str(e)}")
         # Fall back to original method
-        async for chunk in call_llm(context, prompt, system_prompt):
+        async for chunk in call_llm(context, prompt, system_prompt, model=model):
             yield chunk
 
 def postprocess_markdown_response(text: str, max_length: int = 1200) -> str:

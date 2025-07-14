@@ -5,7 +5,7 @@ Configuration settings for the PMAY chatbot backend.
 # Self-consistency prompting configuration
 SELF_CONSISTENCY_CONFIG = {
     "enable_self_consistency": False,  # Toggle to enable/disable self-consistency
-    "num_candidates": 5,  # Number of candidate responses to generate (5-10 recommended)
+    "num_candidates": 3,  # Number of candidate responses to generate (5-10 recommended)
     "similarity_threshold": 0.8,  # Threshold for clustering similar responses (0.7-0.9)
     "min_cluster_size": 2,  # Minimum size for a cluster to be considered
     "temperature_variation": True,  # Whether to vary temperature across candidates
@@ -19,7 +19,7 @@ LLM_CONFIG = {
     "max_tokens": 1000,
     "num_gpu": 1,
     "num_thread": 4,
-    "base_temperature": 0.3,
+    "base_temperature": 0.4,
     "temperature_range": 0.4,  # Range for temperature variation
 }
 
