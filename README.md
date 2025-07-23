@@ -1,9 +1,12 @@
 # 🤖 PMAY Chatbot - MoHUA RAG-based Assistant
 
-A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoHUA) to assist users with queries related to the Pradhan Mantri Awas Yojana (PMAY) scheme. This application uses advanced RAG (Retrieval Augmented Generation) with cross-encoder re-ranking to provide accurate and context-aware responses.
+A  Retrieval-Augmented Generation (RAG) chatbot for the Ministry of Housing and Urban Affairs (MoHUA), designed to answer queries about the Pradhan Mantri Awas Yojana (PMAY) scheme. Built with a modern FastAPI backend, Next.js frontend, and local LLM inference via Ollama.
+
+---
 
 ## 📸 Screenshots
 
+<!-- Replace these with your own screenshots -->
 <div align="center">
   <img src="docs/images/chat-interface.png" alt="Chat Interface" width="600"/>
   <p><em>Main chat interface of the PMAY Chatbot</em></p>
@@ -14,6 +17,10 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
   <p><em>Document upload and processing interface</em></p>
 </div>
 
+<!-- Add more screenshots as needed -->
+
+---
+
 ## 🔄 System Architecture
 
 <div align="center">
@@ -21,24 +28,34 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
   <p><em>High-level architecture of the PMAY Chatbot system</em></p>
 </div>
 
+---
+
 ## 🌟 Features
 
-- **Intelligent Document Processing**: Upload and process PDF documents containing PMAY-related information
-- **Advanced RAG Implementation**: Uses ChromaDB for vector storage and retrieval
-- **Cross-Encoder Re-ranking**: Improves response relevance using semantic re-ranking
-- **Modern Interface**: User-friendly chat interface with real-time responses
-- **Context-Aware Responses**: Provides accurate information based on official documents
-- **Document Management**: Upload, process, and manage PMAY-related documents
-- **Source Attribution**: View source documents for each response
+- **Intelligent Document Processing**: Upload and process PDF documents containing PMAY-related information. Extracts text and metadata for semantic search.
+- **Advanced RAG Implementation**: Uses ChromaDB for vector storage and retrieval, with local embeddings via Ollama.
+- **Cross-Encoder Re-ranking**: Reranks retrieved documents using a local cross-encoder model for improved answer relevance.
+- **Text-to-Speech (TTS)**: Converts answers to speech in English and Hindi using local models.
+- **Multi-language Support**: English and Hindi interface and answers.
+- **Modern UI**: Responsive, accessible chat interface with document upload, model/language selection, and source viewing.
+- **API Endpoints**: RESTful endpoints for chat, document upload, feedback, health, cache, and TTS.
+- **Self-Consistency Prompting**: Generates multiple candidate LLM responses and selects the most consistent answer for robustness.
+- **Cached Responses using Redis**: Fast, cached responses for repeated or common queries using Redis.
+- **Robust Fallback Mechanism**: Graceful fallback answers when no relevant information is found.
+- **Source Attribution**: Every answer includes links to the source documents.
+---
 
 ## 🚨 Prerequisites
 
-- Node.js 18+
-- Python 3.8+
-- AWS account with access to Amazon Bedrock
-- Configured AWS credentials with permissions to access the Nova Pro model
+- **Node.js** 18+
+- **Python** 3.8+
+- **Ollama** (for local LLM inference) — [https://ollama.com/](https://ollama.com/)
+- **ChromaDB** (installed via Python requirements)
+- **Redis** (for caching, optional but recommended)
 
-## 🔧 Setup Instructions
+---
+
+## 🔧 Local Setup Instructions
 
 ### Backend Setup
 
@@ -56,11 +73,29 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
    ```
 
 3. **Set up environment variables**
-   Create a `.env` file in the backend directory:
+   Create a `.env` file in the backend directory (if needed for local config):
    ```
-   AWS_REGION=us-east-1
-   AWS_ACCESS_KEY_ID=your_access_key
-   AWS_SECRET_ACCESS_KEY=your_secret_key
+   # Example (edit as needed)
+   OLLAMA_BASE_URL=http://localhost:11434
+   CHROMA_DB_PATH=./demo-rag-chroma
+   REDIS_URL=redis://localhost:6379/0
+   ```
+
+4. **Start Ollama**
+   - Download and install Ollama from [https://ollama.com/](https://ollama.com/)
+   - Pull the required models (e.g., Llama 3, Nomic Embed):
+     ```sh
+     ollama pull llama3
+     ollama pull nomic-embed-text
+     ```
+   - Start the Ollama server:
+     ```sh
+     ollama serve
+     ```
+
+5. **Run the backend server**
+   ```sh
+   uvicorn api.main:app --reload
    ```
 
 ### Frontend Setup
@@ -77,50 +112,48 @@ A sophisticated chatbot built for the Ministry of Housing and Urban Affairs (MoH
    NEXT_PUBLIC_API_URL=http://localhost:8000
    ```
 
-3. **Run the development servers**
-
-   In one terminal (backend):
+3. **Run the frontend server**
    ```sh
-   cd backend
-   uvicorn api.main:app --reload
-   ```
-
-   In another terminal (frontend):
-   ```sh
-   cd frontend
    npm run dev
    ```
 
-4. **Open [http://localhost:3000](http://localhost:3000)** in your browser to see the application.
+4. **Open [http://localhost:3000](http://localhost:3000)** in your browser to use the application.
+
+---
 
 ## 📚 Project Structure
 
 ```
 pmay-chatbot/
 ├── backend/
-│   ├── api/            # FastAPI application
-│   ├── core/           # Core business logic
-│   ├── models/         # Data models
+│   ├── api/            # FastAPI application (REST endpoints)
+│   ├── core/           # Core business logic (LLM, vector store, caching, etc.)
+│   ├── models/         # Model files (cross-encoder, TTS, etc.)
 │   ├── utils/          # Utility functions
 │   ├── docs/           # Documentation files
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/           # Next.js pages and API routes
-│   ├── components/    # React components
+│   ├── components/    # React components (chat, upload, TTS, etc.)
 │   ├── hooks/         # Custom React hooks
 │   ├── lib/           # Utility functions
 │   └── public/        # Static assets
 └── models/            # Shared model definitions
 ```
 
+---
+
 ## 🛠️ Technical Stack
 
 ### Backend
 - **Framework**: FastAPI
-- **Vector Database**: ChromaDB
-- **Text Processing**: LangChain
-- **LLM Integration**: Amazon Bedrock
-- **Document Processing**: PyPDF2, Unstructured
+- **Vector Database**: ChromaDB (local)
+- **Embeddings**: Ollama (nomic-embed-text)
+- **LLM**: Ollama (Llama 3, Sarvam, etc.)
+- **Text Processing**: LangChain, PyPDF2, Unstructured
+- **Re-ranking**: Cross-encoder (ms-marco-MiniLM-L-6-v2, local)
+- **Caching**: Redis (optional)
+- **TTS**: Local models (English, Hindi)
 
 ### Frontend
 - **Framework**: Next.js 14
@@ -129,33 +162,43 @@ pmay-chatbot/
 - **State Management**: React Hooks
 - **API Client**: Axios
 
-## 🔍 Technical Details
+---
 
-- **Vector Database**: ChromaDB with embeddings
-- **Text Splitting**: RecursiveCharacterTextSplitter with 750 token chunks
-- **Re-ranking**: Cross-encoder model (ms-marco-MiniLM-L-6-v2)
-- **LLM**: Amazon Bedrock Nova Pro model
-- **Document Processing**: PDF parsing with metadata extraction
-- **API**: RESTful endpoints with FastAPI
-- **Authentication**: JWT-based authentication (optional)
+## 🔍 API Reference (Key Endpoints)
 
-## ⚠️ Common Issues and Solutions
+- `POST /chat` — Chat with the bot (streaming responses, source attribution)
+- `POST /upload` — Upload a PDF document for ingestion
+- `GET /upload` — List uploaded documents
+- `POST /feedback` — Submit feedback on a response
+- `GET /cache/stats` — View greeting cache statistics
+- `DELETE /cache/clear` — Clear the greeting cache
+- `GET /health` — System health check
+- `POST /tts/english` — Text-to-speech (English)
+- `POST /tts/hindi` — Text-to-speech (Hindi)
+- `GET/POST /config/self-consistency` — Get or update self-consistency prompting config
 
-1. **ChromaDB/SQLite Compatibility**
-   - If you encounter SQLite-related errors, refer to [ChromaDB troubleshooting](https://docs.trychroma.com/troubleshooting#sqlite)
+---
 
-2. **AWS Credentials**
-   - Ensure your AWS credentials have the necessary permissions to access Amazon Bedrock
-   - Verify the AWS region is correct and supports the Nova Pro model
+## 🧪 Testing
 
-3. **Document Processing Issues**
-   - Check that uploaded PDFs are not password-protected
-   - Ensure PDFs are text-based and not scanned images without OCR
+- **Backend**: Run the test suite for enhanced chatbot features:
+  ```sh
+  cd backend
+  python test_enhanced_chatbot.py
+  ```
+- **Covers**: Greeting cache, fallback, RAG, cache management, health check, and more.
 
-4. **Development Environment**
-   - Make sure both backend and frontend servers are running
-   - Check that environment variables are properly set
-   - Verify network connectivity between frontend and backend
+---
+
+## ⚠️ Troubleshooting
+
+- **Ollama not running**: Ensure `ollama serve` is active and required models are pulled.
+- **ChromaDB/SQLite errors**: Check file permissions and database path.
+- **Redis not available**: The app will run, but caching will be limited.
+- **PDF upload issues**: Only text-based PDFs are supported (no scanned images).
+- **Frontend/backend connection**: Verify `NEXT_PUBLIC_API_URL` and backend server port.
+
+---
 
 ## 🤝 Contributing
 
@@ -165,49 +208,19 @@ pmay-chatbot/
 4. Push to the branch
 5. Create a Pull Request
 
+---
+
 ## 📝 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+---
 
 ## 🔗 Useful Links
 
-- [PMAY Official Website](https://pmay-urban.gov.in/)
-- [MoHUA Official Website](https://mohua.gov.in/)
-- [Amazon Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
+- [Ollama Documentation](https://ollama.com/)
 - [ChromaDB Documentation](https://docs.trychroma.com/)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-\`\`\`
-
-Let's update the layout.tsx file to include the proper metadata:
-
-```typescriptreact file="app/layout.tsx"
-[v0-no-op-code-block-prefix]import type React from "react"
-import "./globals.css"
-import type { Metadata } from "next"
-import { Inter } from 'next/font/google'
-import { ThemeProvider } from "@/components/theme-provider"
-
-const inter = Inter({ subsets: ["latin"] })
-
-// Update the metadata
-export const metadata: Metadata = {
-  title: "PMAY Chatbot - MoHUA RAG-based Assistant",
-  description: "AI chatbot for the Ministry of Housing and Urban Affairs to assist with PMAY scheme queries",
-}
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="en">
-      <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-        </ThemeProvider>
-      </body>
-    </html>
-  )
-}
+- [PMAY Official Website](https://pmay-urban.gov.in/)
+- [MoHUA Official Website](https://mohua.gov.in/)

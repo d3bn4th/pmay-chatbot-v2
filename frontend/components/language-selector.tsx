@@ -1,6 +1,7 @@
 "use client"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Languages } from "lucide-react"
+import { TranslationKey } from "@/hooks/use-translation"
 
 const languages = [
   { code: "en", name: "English", nativeName: "English" },
@@ -10,18 +11,19 @@ const languages = [
 interface LanguageSelectorProps {
   selectedLanguage: string
   onLanguageChange: (language: string) => void
+  t: (key: TranslationKey) => string
 }
 
-export function LanguageSelector({ selectedLanguage, onLanguageChange }: LanguageSelectorProps) {
+export function LanguageSelector({ selectedLanguage, onLanguageChange, t }: LanguageSelectorProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center text-sm sm:text-base font-medium text-white">
         <Languages className="mr-2 h-4 w-4" />
-        Language
+        {t('language')}
       </div>
       <Select value={selectedLanguage} onValueChange={onLanguageChange}>
         <SelectTrigger className="w-full bg-blue-700 border-blue-600 text-white hover:bg-blue-600 text-sm sm:text-base">
-          <SelectValue placeholder="Select language" />
+          <SelectValue placeholder={t('select_language')} />
         </SelectTrigger>
         <SelectContent className="max-h-[300px] sm:max-h-[400px]">
           {languages.map((lang) => (

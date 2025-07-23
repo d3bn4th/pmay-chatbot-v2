@@ -1,9 +1,0 @@
-{
-  "[project]/node_modules/react-pdf/dist/index.js [app-client] (ecmascript, next/dynamic entry)": {
-    "id": "[project]/node_modules/react-pdf/dist/index.js [app-client] (ecmascript, next/dynamic entry)",
-    "files": [
-      "static/chunks/node_modules_7fe7d802._.js",
-      "static/chunks/node_modules_react-pdf_dist_index_29c7ffcf.js"
-    ]
-  }
-}

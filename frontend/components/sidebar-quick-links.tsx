@@ -1,117 +1,98 @@
 import { Globe, FileText, Phone, Mail, MapPin, Info, ExternalLink } from "lucide-react";
 import React from "react";
+import { TranslationKey } from "@/hooks/use-translation";
 
-const quickLinks = [
+const quickLinks = (t: (key: TranslationKey) => string) => [
   {
-    category: "Official Portals",
+    category: t('official_portals'),
     links: [
       {
         icon: <Globe className="mr-2" />,
-        label: "PMAY-U Official Website",
-        href: "https://pmaymis.gov.in/",
-        description: "Main PMAY Urban portal",
+        label: t('pmay_u_website'),
+        href: "https://pmaymis.gov.in/PMAYMIS2_2024/PmayDefault.aspx",
+        description: t('main_pmay_portal'),
         external: true,
       },
       {
         icon: <Globe className="mr-2" />,
-        label: "MoHUA Official Website",
+        label: t('mohua_website'),
         href: "https://mohua.gov.in/",
-        description: "Ministry of Housing & Urban Affairs",
-        external: true,
-      },
-      {
-        icon: <Globe className="mr-2" />,
-        label: "Digital India Portal",
-        href: "https://digitalindia.gov.in/",
-        description: "Digital India initiatives",
+        description: t('ministry_of_housing'),
         external: true,
       },
     ],
   },
   {
-    category: "Application & Forms",
+    category: t('application_and_forms'),
     links: [
       {
         icon: <FileText className="mr-2" />,
-        label: "Online Application Portal",
-        href: "https://pmaymis.gov.in/",
-        description: "Apply for PMAY online",
+        label: t('online_application_portal'),
+        href: "https://pmaymis.gov.in/PMAYMIS2_2024/PMAY_SURVEY/EligiblityCheck.aspx",
+        description: t('apply_for_pmay'),
         external: true,
       },
       {
-        icon: <FileText className="mr-2" />,
-        label: "Application Form Download",
-        href: "https://pmaymis.gov.in/",
-        description: "Download application forms",
-        external: true,
-      },
-      {
-        icon: <FileText className="mr-2" />,
-        label: "Document Checklist",
-        href: "https://pmaymis.gov.in/",
-        description: "Required documents list",
+        icon: <MapPin className="mr-2" />, 
+        label: t('find_nearest_csc'),
+        href: "https://locator.csccloud.in/",
+        description: t('locate_csc_centers'),
         external: true,
       },
     ],
   },
   {
-    category: "Support & Help",
+    category: t('support_and_help'),
     links: [
       {
         icon: <Phone className="mr-2" />,
-        label: "Helpline: 1800-11-6163",
+        label: t('helpline'),
         href: "tel:1800116163",
-        description: "Toll-free helpline",
+        description: t('toll_free_helpline'),
         external: false,
       },
       {
         icon: <Mail className="mr-2" />,
-        label: "Email Support",
+        label: t('email_support'),
         href: "mailto:support.pmay@gov.in",
         description: "support.pmay@gov.in",
         external: false,
       },
-      {
-        icon: <MapPin className="mr-2" />,
-        label: "Find Nearest Office",
-        href: "https://pmaymis.gov.in/",
-        description: "Locate PMAY offices",
-        external: true,
-      },
     ],
   },
   {
-    category: "Resources",
+    category: t('resources'),
     links: [
       {
         icon: <FileText className="mr-2" />,
-        label: "Guidelines & Policies",
+        label: t('guidelines_and_policies'),
         href: "https://pmaymis.gov.in/",
-        description: "Official guidelines",
+        description: t('official_guidelines'),
         external: true,
       },
       {
         icon: <Info className="mr-2" />,
-        label: "FAQ Section",
+        label: t('faq_section'),
         href: "https://pmaymis.gov.in/",
-        description: "Frequently asked questions",
+        description: t('frequently_asked_questions'),
         external: true,
       },
       {
         icon: <Globe className="mr-2" />,
-        label: "Success Stories",
+        label: t('success_stories'),
         href: "https://pmaymis.gov.in/",
-        description: "PMAY success stories",
+        description: t('pmay_success_stories'),
         external: true,
       },
     ],
   },
 ];
 
-export default function SidebarQuickLinks() {
+export default function SidebarQuickLinks({ t }: { t: (key: TranslationKey) => string }) {
+  const links = quickLinks(t);
   return (
     <div className="space-y-4">
-      {quickLinks.map((section) => (
+      {links.map((section) => (
         <div key={section.category}>
           <h4 className="text-[11px] font-bold text-blue-100 uppercase mb-1 tracking-wider">{section.category}</h4>
           <div className="space-y-1">
@@ -121,7 +102,7 @@ export default function SidebarQuickLinks() {
                 href={link.href}
                 target={link.external ? "_blank" : undefined}
                 rel={link.external ? "noopener noreferrer" : undefined}
-                className="flex items-center bg-blue-700 hover:bg-blue-600 transition rounded-lg px-3 py-2 text-blue-100 shadow group"
+                className="flex items-center px-1 py-1 text-blue-100 hover:underline transition group"
               >
                 {React.cloneElement(link.icon, { className: 'mr-2 h-4 w-4 text-blue-200' })}
                 <div className="flex-1">
@@ -138,10 +119,10 @@ export default function SidebarQuickLinks() {
       ))}
       {/* Emergency Contact Box */}
       <div className="mt-4 p-3 bg-blue-900 rounded-lg shadow border border-blue-700">
-        <div className="font-bold text-blue-100 mb-1 text-[12px]">Emergency Contact</div>
+        <div className="font-bold text-blue-100 mb-1 text-[12px]">{t('emergency_contact')}</div>
         <div className="flex items-center text-blue-100 text-[13px] mb-1">
           <Phone className="mr-2 h-3 w-3 text-blue-200" />
-          <a href="tel:1800116163" className="underline hover:text-blue-200">24/7 Helpline: 1800-11-6163</a>
+          <a href="tel:1800116163" className="underline hover:text-blue-200">{t('twenty_four_seven_helpline')}</a>
         </div>
         <div className="flex items-center text-blue-100 text-[13px]">
           <Mail className="mr-2 h-3 w-3 text-blue-200" />

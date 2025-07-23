@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { ChevronDown, ChevronUp, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { TranslationKey } from "@/hooks/use-translation"
 
 export interface SourceDocument {
   text: string
@@ -18,9 +19,10 @@ export interface SourceDocument {
 
 interface SourceDocumentsProps {
   documents: SourceDocument[]
+  t: (key: TranslationKey) => string
 }
 
-export function SourceDocuments({ documents }: SourceDocumentsProps) {
+export function SourceDocuments({ documents, t }: SourceDocumentsProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   if (!documents || documents.length === 0) {
@@ -37,7 +39,7 @@ export function SourceDocuments({ documents }: SourceDocumentsProps) {
       >
         {isExpanded ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
         <span>
-          {isExpanded ? "Hide" : "Show"} {documents.length} source{documents.length > 1 ? "s" : ""}
+          {isExpanded ? t('hide_sources') : t('show_sources')} {documents.length} {t('sources')}{documents.length > 1 ? t('source_plural') : ""}
         </span>
       </Button>
 
@@ -48,9 +50,9 @@ export function SourceDocuments({ documents }: SourceDocumentsProps) {
               <div className="flex flex-col sm:flex-row sm:items-center text-gray-600 mb-1 gap-1 sm:gap-0">
                 <div className="flex items-center">
                   <FileText className="h-3 w-3 mr-1" />
-                  <span className="font-medium">{doc.metadata?.source || "Document"}</span>
+                  <span className="font-medium">{doc.metadata?.source || t('document')}</span>
                 </div>
-                <span className="text-gray-400 sm:ml-auto">Relevance: {(doc.score * 100).toFixed(0)}%</span>
+                <span className="text-gray-400 sm:ml-auto">{t('relevance')}: {(doc.score * 100).toFixed(0)}%</span>
               </div>
               <p className="text-gray-700 text-xs sm:text-sm break-words">{doc.text}</p>
             </div>

@@ -44,7 +44,7 @@ def process_document(file_content: bytes, filename: str, chunking_method: str = 
 
         # Fallback: Character-based chunking
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=3000, chunk_overlap=1000
+            chunk_size=1000, chunk_overlap=150
         )
         splits = text_splitter.split_documents(documents)
         return splits

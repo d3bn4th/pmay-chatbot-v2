@@ -74,48 +74,6 @@ class FallbackHandler:
             "PMAY loan process",
             "PMAY official website"
         ]
-        
-        # Ambiguous question patterns
-        self.ambiguous_patterns = [
-            r'\b(it|this|that|those|them)\b',
-            r'\b(what|how|why|when|where)\s+(is|are|was|were|will|would|could|should)\b',
-            r'\b(tell\s+me\s+about)\b',
-            r'\b(explain)\b',
-            r'\b(help)\b',
-            r'\b(guide)\b'
-        ]
-    
-    def is_ambiguous_question(self, text: str) -> bool:
-        """
-        Check if a question is ambiguous and needs clarification.
-        
-        Args:
-            text: Input text to check
-            
-        Returns:
-            True if question is ambiguous, False otherwise
-        """
-        normalized_text = text.lower().strip()
-        
-        # Check for very short questions
-        if len(normalized_text.split()) < 3:
-            return True
-        
-        # Check for ambiguous patterns
-        for pattern in self.ambiguous_patterns:
-            if re.search(pattern, normalized_text, re.IGNORECASE):
-                # Check if the question lacks specific PMAY-related keywords
-                pmay_keywords = [
-                    'pmay', 'pradhan mantri', 'awas yojana', 'housing', 'home', 'loan',
-                    'eligibility', 'apply', 'application', 'documents', 'benefits',
-                    'subsidy', 'income', 'urban', 'rural', 'scheme', 'program'
-                ]
-                
-                has_pmay_context = any(keyword in normalized_text for keyword in pmay_keywords)
-                if not has_pmay_context:
-                    return True
-        
-        return False
     
     def get_fallback_response(self, fallback_type: FallbackType, user_question: str = "") -> str:
         """

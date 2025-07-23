@@ -1,12 +1,14 @@
 "use client"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Cpu } from "lucide-react"
+import { TranslationKey } from "@/hooks/use-translation"
 
 const models = [
   { id: "llama3.2:1b", name: "Llama 3 1B", description: "Llama 3, 1.2B parameters" },
   { id: "llama3.2:3b", name: "Llama 3 3B", description: "Llama 3, 3.2B parameters" },
   { id: "llama3.2:1b-instruct-fp16", name: "Llama 3 1B Instruct FP16", description: "Llama 3, 1.2B, Instruct, FP16" },
   { id: "gemma3:1b-it-qat", name: "Gemma 3 1B IT QAT", description: "Gemma 3, 1B, IT QAT" },
+  { id: "gemma3:4b-it-qat", name: "Gemma 3 4B IT QAT", description: "Gemma 3, 4B, IT QAT" },
   { id: "gemma3:1b", name: "Gemma 3 1B", description: "Gemma 3, 1B parameters" },
   { id: "gaganyatri/sarvam-2b-v0.5:latest", name: "Sarvam 2B v0.5", description: "Sarvam, 2B parameters, v0.5" }
 ];
@@ -14,18 +16,25 @@ const models = [
 interface ModelSelectorProps {
   selectedModel: string
   onModelChange: (model: string) => void
+  t: (key: TranslationKey) => string
 }
 
-export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorProps) {
+export function ModelSelector({ selectedModel, onModelChange, t }: ModelSelectorProps) {
+  // Handler to change model and reload page
+  const handleModelChange = (model: string) => {
+    onModelChange(model);
+    window.location.reload();
+  };
   return (
     <div className="space-y-2">
       <div className="flex items-center text-sm sm:text-base font-medium text-white">
         <Cpu className="mr-2 h-4 w-4" />
-        AI Model
+        {t('ai_model')}
       </div>
-      <Select value={selectedModel} onValueChange={onModelChange}>
+      <div className="text-xs text-yellow-300 mb-1">Changing the model will reload the page.</div>
+      <Select value={selectedModel} onValueChange={handleModelChange}>
         <SelectTrigger className="w-full h-24 py-6 bg-blue-700 border-blue-600 text-white hover:bg-blue-600 text-sm sm:text-base">
-          <SelectValue placeholder="Select model">
+          <SelectValue placeholder={t('select_model')}>
             {selectedModel && (() => {
               const model = models.find(m => m.id === selectedModel);
               if (!model) return null;

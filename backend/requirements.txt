@@ -14,3 +14,4 @@ tqdm>=4.66.1
 pymupdf
 scikit-learn>=1.3.0
 cachetools>=5.0.0
+redis

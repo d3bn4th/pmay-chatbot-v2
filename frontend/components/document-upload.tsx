@@ -1,7 +1,8 @@
 import React, { useRef, useState, DragEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { TranslationKey } from "@/hooks/use-translation";
 
-export function DocumentUpload({ onUpload }: { onUpload?: () => void }) {
+export function DocumentUpload({ onUpload, t }: { onUpload?: () => void, t: (key: TranslationKey) => string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,7 +13,7 @@ export function DocumentUpload({ onUpload }: { onUpload?: () => void }) {
     setError(null);
     setSuccess(null);
     if (file.type !== "application/pdf") {
-      setError("Only PDF files are supported.");
+      setError(t('only_pdf_supported'));
       return;
     }
     setUploading(true);
@@ -25,13 +26,13 @@ export function DocumentUpload({ onUpload }: { onUpload?: () => void }) {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error || "Upload failed.");
+        setError(data.error || t('upload_failed'));
       } else {
-        setSuccess(data.message || "Upload successful.");
+        setSuccess(data.message || t('upload_successful'));
         if (onUpload) onUpload();
       }
     } catch {
-      setError("Network or server error.");
+      setError(t('network_or_server_error'));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -80,11 +81,11 @@ export function DocumentUpload({ onUpload }: { onUpload?: () => void }) {
         onDragLeave={handleDragLeave}
         tabIndex={0}
         role="button"
-        aria-label="Upload PDF Document"
+        aria-label={t('upload_pdf_document')}
       >
         <div className="flex flex-col items-center justify-center gap-2">
           <svg width="32" height="32" fill="none" viewBox="0 0 16 16"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clipRule="evenodd" fill="#666" fillRule="evenodd"/></svg>
-          <span className="font-normal text-gray-400 text-sm mt-1">Drag & drop a PDF here, or click to select</span>
+          <span className="font-normal text-gray-400 text-sm mt-1">{t('drag_drop_pdf')}</span>
         </div>
       </div>
       <Button
@@ -93,13 +94,13 @@ export function DocumentUpload({ onUpload }: { onUpload?: () => void }) {
         disabled={uploading}
         className="bg-blue-600 hover:bg-blue-700 text-white w-full"
       >
-        {uploading ? "Uploading..." : "Upload and Process"}
+        {uploading ? t('uploading') : t('upload_and_process')}
       </Button>
       {error && <div className="text-red-600 text-sm">{error}</div>}
       {success && <div className="text-green-600 text-sm">{success}</div>}
       {/* Explanation below the button */}
       <div className="text-xs text-gray-500 mt-2">
-        After uploading, your PDF will be processed and its content will become available for search and chat. Only PDF files are supported.
+        {t('pdf_processing_explanation')}
       </div>
     </div>
   );

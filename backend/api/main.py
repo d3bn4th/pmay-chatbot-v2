@@ -16,8 +16,10 @@ from core.llm import re_rank_cross_encoders, call_llm, call_llm_with_self_consis
 from core.constants import SYSTEM_PROMPT
 from core.config import update_self_consistency_config, get_self_consistency_config, validate_config
 from core.greeting_cache import get_greeting_response, get_cache_stats, clear_cache
-from core.fallback_handler import fallback_handler, FallbackType
+from core.redis_cache import get_faq_answer, FAQ_KEYS
 from werkzeug.utils import secure_filename
+from .tts import router as tts_router
+from .tts import cleanup_all_tts_files
 
 app = FastAPI(title="PMAY Chatbot API")
 
@@ -33,6 +35,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(tts_router)
+
+# Cleanup TTS files on shutdown
+@app.on_event("shutdown")
+async def shutdown_cleanup_tts():
+    print("Cleaning up TTS files on shutdown...")
+    cleanup_all_tts_files()
 
 class ChatRequest(BaseModel):
     message: str
@@ -84,6 +94,13 @@ async def chat(request: Request):
             try:
                 user_input_lower = chat_request.message.lower()
                 
+                # Check for FAQ cache first
+                faq_answer = get_faq_answer(user_input_lower)
+                if faq_answer:
+                    print(f"Using cached FAQ response for: {chat_request.message}")
+                    yield f"data: {json.dumps({'type': 'text', 'content': faq_answer})}\n\n"
+                    return
+                
                 # Check for greeting responses first (efficient caching)
                 greeting_response = get_greeting_response(chat_request.message)
                 if greeting_response:
@@ -93,10 +110,10 @@ async def chat(request: Request):
                     return
                 
                 # Check for ambiguous questions
-                if fallback_handler.is_ambiguous_question(chat_request.message):
+                if False: # fallback_handler.is_ambiguous_question(chat_request.message): # fallback_handler is removed
                     print(f"Detected ambiguous question: {chat_request.message}")
-                    ambiguous_response = fallback_handler.get_fallback_response(FallbackType.AMBIGUOUS_QUESTION, chat_request.message)
-                    yield f"data: {json.dumps({'type': 'text', 'content': ambiguous_response})}\n\n"
+                    generic_response = "Sorry, I am unable to answer your question at the moment."
+                    yield f"data: {json.dumps({'type': 'text', 'content': generic_response})}\n\n"
                     return
                 
                 # Get documents from vector store
@@ -110,12 +127,8 @@ async def chat(request: Request):
                 # Check if we should use fallback due to no documents
                 if not documents:
                     print(f"No documents found for query: {chat_request.message}")
-                    fallback_response = fallback_handler.get_enhanced_fallback_response(
-                        FallbackType.NO_DOCUMENTS, 
-                        chat_request.message, 
-                        documents_found=0
-                    )
-                    yield f"data: {json.dumps({'type': 'text', 'content': fallback_response})}\n\n"
+                    generic_response = "Sorry, I am unable to answer your question at the moment."
+                    yield f"data: {json.dumps({'type': 'text', 'content': generic_response})}\n\n"
                     return
 
                 # Get reranked documents, their indices, and scores
@@ -135,12 +148,8 @@ async def chat(request: Request):
                 # Check if we should use fallback due to no relevant text
                 if not relevant_text:
                     print(f"No relevant text found after reranking for query: {chat_request.message}")
-                    fallback_response = fallback_handler.get_enhanced_fallback_response(
-                        FallbackType.NO_RELEVANT_TEXT, 
-                        chat_request.message, 
-                        documents_found=len(documents)
-                    )
-                    yield f"data: {json.dumps({'type': 'text', 'content': fallback_response})}\n\n"
+                    generic_response = "Sorry, I am unable to answer your question at the moment."
+                    yield f"data: {json.dumps({'type': 'text', 'content': generic_response})}\n\n"
                     return
 
                 # Stream the LLM response with self-consistency prompting
@@ -154,9 +163,9 @@ async def chat(request: Request):
                 except Exception as e:
                     print(f"Error in LLM streaming: {str(e)}")
                     llm_success = False
-                    # Use fallback response for LLM errors
-                    fallback_response = fallback_handler.get_fallback_response(FallbackType.LLM_ERROR, chat_request.message)
-                    yield f"data: {json.dumps({'type': 'text', 'content': fallback_response})}\n\n"
+                    # Use generic response for LLM errors
+                    generic_response = "Sorry, I am unable to answer your question at the moment."
+                    yield f"data: {json.dumps({'type': 'text', 'content': generic_response})}\n\n"
                     return
                 
                 # After streaming is complete, send the sources
@@ -175,13 +184,9 @@ async def chat(request: Request):
                 
             except Exception as e:
                 print(f"Error in generate_response_stream: {str(e)}")
-                # Use enhanced fallback for general errors
-                fallback_response = fallback_handler.get_enhanced_fallback_response(
-                    FallbackType.GENERAL_ERROR, 
-                    chat_request.message, 
-                    error_details=str(e)
-                )
-                yield f"data: {json.dumps({'type': 'text', 'content': fallback_response})}\n\n"
+                # Use generic response for general errors
+                generic_response = "Sorry, I am unable to answer your question at the moment."
+                yield f"data: {json.dumps({'type': 'text', 'content': generic_response})}\n\n"
 
         return StreamingResponse(
             generate_response_stream(),
@@ -328,6 +333,9 @@ async def health_check():
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
+
+for route in app.routes:
+    print(route.path)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 

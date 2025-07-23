@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Loader2, Info, Home, FileText, Settings, ArrowLeft } from "lucide-react"
+import { Loader2, Info, Home, FileText, Settings, ArrowLeft, Mic, MicOff } from "lucide-react"
 import Image from "next/image"
 import { SourceDocument, SourceDocuments } from "@/components/source-documents"
 import { useMobile } from "@/hooks/use-mobile"
@@ -12,6 +12,34 @@ import { LanguageSelector } from "@/components/language-selector"
 import DocumentUpload from "@/components/document-upload";
 import { ModelSelector } from "@/components/model-selector";
 import SidebarQuickLinks from "@/components/sidebar-quick-links";
+import { TextToSpeech } from "@/components/text-to-speech";
+import { useTranslation, TranslationKey } from "@/hooks/use-translation";
+import TransliterateInput from "@/components/transliterate-input";
+
+// Extend the Window interface to include SpeechRecognition and webkitSpeechRecognition
+// Declare a minimal SpeechRecognition type for type safety
+// (You can replace this with a more complete type if needed)
+type MinimalSpeechRecognition = {
+  new (): SpeechRecognitionInstance;
+};
+
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: MinimalSpeechRecognition;
+    webkitSpeechRecognition?: MinimalSpeechRecognition;
+  }
+}
 
 // Define a custom message type that includes an 'id' and optional sources
 interface ChatMessageType {
@@ -33,16 +61,16 @@ const ThinkingDots = () => {
 };
 
 // Add this above the ChatPage component
-const SAMPLE_QUESTIONS = [
-  "What is PMAY?",
-  "How to apply for PMAY?",
-  "What is the eligibility criteria?",
-  "What is Pradhan Mantri Awas Yojana (Urban) and its objectives and scope?",
-  "What is In-Situ Slum Redevelopment?",
-  "What is Credit Linked Subsidy Scheme (CLSS)?",
-  "What is Affordable Housing in Partnership (AHP)?",
-  "What is Beneficiary led individual house construction enhancements (BLC)?",
-  "Who is defined as a beneficiary under Pradhan Mantri Awas Yojana (Urban) Scheme?",
+const getSampleQuestions = (t: (key: TranslationKey) => string) => [
+  t('sample_question_1'),
+  t('sample_question_2'),
+  t('sample_question_3'),
+  t('sample_question_4'),
+  t('sample_question_5'),
+  t('sample_question_6'),
+  t('sample_question_7'),
+  t('sample_question_8'),
+  t('sample_question_9'),
 ];
 
 export default function ChatPage() {
@@ -57,6 +85,20 @@ export default function ChatPage() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [lastUserMessage, setLastUserMessage] = useState<ChatMessageType | null>(null);
   const [selectedModel, setSelectedModel] = useState("llama3.2:1b");
+  const [isListening, setIsListening] = useState(false);
+  // Use a ref to store the SpeechRecognition constructor
+  const SpeechRecognitionCtor = useRef<unknown>(null);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const { t } = useTranslation(selectedLanguage as "en" | "hi");
+
+
+  // Remove the SpeechRecognitionType type alias to avoid linter errors
+  // Use 'any' directly in the ref and where needed
+  // type SpeechRecognitionType = typeof (window as any).SpeechRecognition;
+  type SpeechRecognitionEventType = Event & { results: { [key: number]: { [key: number]: { transcript: string } } } };
+  type SpeechRecognitionErrorEventType = Event & { error: string };
+
+  const recognitionRef = useRef<unknown>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isMobile = useMobile()
@@ -92,6 +134,16 @@ export default function ChatPage() {
       }
     }
   }, [messages.length]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      SpeechRecognitionCtor.current =
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition ||
+        null;
+      setIsSpeechSupported(!!SpeechRecognitionCtor.current);
+    }
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -262,6 +314,48 @@ export default function ChatPage() {
     }, 0);
   };
 
+  // Speech-to-text logic
+  const handleStartListening = () => {
+    if (typeof window === 'undefined' || !SpeechRecognitionCtor.current) {
+      alert('Speech recognition is not supported in this browser.');
+      return;
+    }
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in this browser.');
+      return;
+    }
+    if (!recognitionRef.current) {
+      recognitionRef.current = new (SpeechRecognitionCtor.current as MinimalSpeechRecognition)();
+      (recognitionRef.current as SpeechRecognitionInstance).continuous = false;
+      (recognitionRef.current as SpeechRecognitionInstance).interimResults = false;
+      (recognitionRef.current as SpeechRecognitionInstance).lang = selectedLanguage === 'hi' ? 'hi-IN' : 'en-US';
+      (recognitionRef.current as SpeechRecognitionInstance).onresult = (event) => {
+        const speechEvent = event as SpeechRecognitionEventType;
+        const transcript = speechEvent.results[0][0].transcript;
+        setInput((prev) => prev ? prev + ' ' + transcript : transcript);
+        setIsListening(false);
+      };
+      (recognitionRef.current as SpeechRecognitionInstance).onerror = (event) => {
+        const errorEvent = event as SpeechRecognitionErrorEventType;
+        setIsListening(false);
+        alert('Speech recognition error: ' + errorEvent.error);
+      };
+      (recognitionRef.current as SpeechRecognitionInstance).onend = () => {
+        setIsListening(false);
+      };
+    }
+    setIsListening(true);
+    (recognitionRef.current as SpeechRecognitionInstance).lang = selectedLanguage === 'hi' ? 'hi-IN' : 'en-US';
+    (recognitionRef.current as SpeechRecognitionInstance).start();
+  };
+
+  const handleStopListening = () => {
+    if (recognitionRef.current && typeof (recognitionRef.current as SpeechRecognitionInstance).stop === 'function') {
+      (recognitionRef.current as SpeechRecognitionInstance).stop();
+      setIsListening(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-[#FAFAF6]">
       {/* Sidebar */}
@@ -284,7 +378,7 @@ export default function ChatPage() {
             />
           </div>
           <div className="flex items-center justify-between mb-8">
-            <h1 className="text-xl font-bold w-full text-center">PMAY Chatbot</h1>
+            <h1 className="text-xl font-bold w-full text-center">{t('pma_y_chatbot')}</h1>
             {isMobile && (
               <Button
                 variant="ghost"
@@ -306,7 +400,7 @@ export default function ChatPage() {
               onClick={() => setActiveSection("home")}
             >
               <Home className="mr-2 h-5 w-5" />
-              Home
+              {t('home')}
             </Button>
             <Button
               variant="ghost"
@@ -316,7 +410,7 @@ export default function ChatPage() {
               onClick={() => setActiveSection("documents")}
             >
               <FileText className="mr-2 h-5 w-5" />
-              Documents
+              {t('documents')}
             </Button>
             <Button
               variant="ghost"
@@ -326,14 +420,14 @@ export default function ChatPage() {
               onClick={() => setActiveSection("settings")}
             >
               <Settings className="mr-2 h-5 w-5" />
-              Settings
+              {t('settings')}
             </Button>
           </nav>
           {/* Show DocumentUpload in sidebar when Documents is selected */}
           {activeSection === "documents" && (
             <div className="mt-2">
-              <h2 className="text-lg font-semibold mb-4">Upload Documents</h2>
-              <DocumentUpload />
+              <h2 className="text-lg font-semibold mb-4">{t('upload_documents')}</h2>
+              <DocumentUpload t={t} />
             </div>
           )}
           {/* Language Selector and Model Selector only in Settings */}
@@ -343,10 +437,11 @@ export default function ChatPage() {
                 <LanguageSelector
                   selectedLanguage={selectedLanguage}
                   onLanguageChange={setSelectedLanguage}
+                  t={t}
                 />
               </div>
               <div className="mb-8 px-2 pl-2">
-                <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} />
+                <ModelSelector selectedModel={selectedModel} onModelChange={setSelectedModel} t={t} />
               </div>
             </>
           )}
@@ -354,7 +449,7 @@ export default function ChatPage() {
           {/* Dynamic Content Based on Active Section */}
           <div className="flex-1 overflow-y-auto">
             {activeSection === "home" && (
-              <SidebarQuickLinks />
+              <SidebarQuickLinks t={t} />
             )}
           </div>
           {/* Remove QuickActions from here */}
@@ -387,14 +482,13 @@ export default function ChatPage() {
                         />
                       </div>
                       
-                      <h3 className="text-3xl font-bold text-blue-800">PMAY Chatbot</h3>
+                      <h3 className="text-3xl font-bold text-blue-800">{t('pma_y_chatbot')}</h3>
                       <p className="text-lg text-gray-600 max-w-md mx-auto">
-                        Ask questions about the Pradhan Mantri Awas Yojana (PMAY) scheme and get accurate,
-                        context-aware responses.
+                        {t('ask_questions_about_pmay')}
                       </p>
                       <div className="flex items-center justify-center mt-3">
                         <Info className="h-4 w-4 text-blue-600 mr-2" />
-                        <span className="text-sm text-blue-600">Powered by RAG with cross-encoder re-ranking</span>
+                        <span className="text-sm text-blue-600">{t('powered_by_rag')}</span>
                       </div>
                     </div>
                   </div>
@@ -424,10 +518,10 @@ export default function ChatPage() {
                           d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.1-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                         />
                       </svg>
-                      <h3 className="text-xl font-semibold">Oops! Something went wrong.</h3>
+                      <h3 className="text-xl font-semibold">{t('oops_something_went_wrong')}</h3>
                       <p className="text-sm">{error.message || "Please try again later."}</p>
                       <Button onClick={() => window.location.reload()} variant="destructive" size="sm">
-                        Refresh
+                        {t('refresh')}
                       </Button>
                     </div>
                   </div>
@@ -459,13 +553,20 @@ export default function ChatPage() {
                         >
                           <div className={`prose prose-sm prose-blue prose-a:text-blue-600 prose-a:underline leading-normal break-words ${message.role === "user" ? "text-white" : "text-gray-900"}`}>
                             {message.role === "assistant" ? (
-                              <MarkdownMessage>{message.content}</MarkdownMessage>
+                              <>
+                                <MarkdownMessage>{message.content}</MarkdownMessage>
+                                {/* Text To Speech bubble under each assistant response */}
+                                <div className="mt-2 flex items-center">
+                                  <span className="mr-1 text-xs text-gray-400">{t('listen')}</span>
+                                  <TextToSpeech text={message.content} language={selectedLanguage} t={t} />
+                                </div>
+                              </>
                             ) : (
                               message.content
                             )}
                           </div>
                           {message.sources && message.sources.length > 0 && message.role !== "user" && (
-                            <SourceDocuments documents={message.sources} />
+                            <SourceDocuments documents={message.sources} t={t} />
                           )}
                           {/* Thumbs up/down for assistant messages */}
                           {message.role === "assistant" && (
@@ -474,7 +575,7 @@ export default function ChatPage() {
                         </div>
                         {message.role === "user" && (
                           <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
-                            <AvatarFallback className="bg-gray-300 text-gray-800 text-xs">You</AvatarFallback>
+                            <AvatarFallback className="bg-gray-300 text-gray-800 text-xs">{t('you')}</AvatarFallback>
                           </Avatar>
                         )}
                       </div>
@@ -484,7 +585,7 @@ export default function ChatPage() {
                         <Avatar className="h-10 w-10 border border-gray-200 shadow-md">
                           <div className="rounded-full w-full h-full bg-white flex items-center justify-center">
                             <Image
-                              src="/bot-avatar.png"
+                              src="/chatbot-avatar.png"
                               alt="bot-avatar"
                               width={30}
                               height={30}
@@ -507,7 +608,7 @@ export default function ChatPage() {
             {/* Sample Questions Bar */}
             <div className="fixed bottom-24 left-74 right-0 z-50 px-4 mb-0 pointer-events-none">
               <div className="mx-auto w-full max-w-3xl flex gap-3 overflow-x-auto pointer-events-auto py-1 px-2 scrollbar-none" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {SAMPLE_QUESTIONS.map((q, idx) => (
+                {getSampleQuestions(t).map((q, idx) => (
                   <button
                     key={idx}
                     type="button"
@@ -524,22 +625,36 @@ export default function ChatPage() {
             </div>
             {/* Centered, rectangle chat input at the bottom of the viewport */}
             <div className="fixed bottom-0 left-74 right-0 z-50 px-4 mb-4 pointer-events-none">
-              <form ref={formRef} onSubmit={handleSubmit} className="mx-auto flex items-center w-full max-w-3xl bg-white rounded-xl shadow-2xl border border-gray-100 px-6 py-3 gap-2 pointer-events-auto">
-                <input
-                  type="text"
-                  placeholder="Ask about PMAY scheme..."
-                  value={input}
-                  onChange={handleInputChange}
-                  className="flex-1 bg-transparent border-none outline-none text-gray-700 text-lg placeholder:text-gray-400 px-2"
-                  disabled={isLoading}
-                  aria-label="Chat input"
-                />
+              <form ref={formRef} onSubmit={handleSubmit} className="mx-auto flex items-center w-full max-w-3xl bg-white rounded-xl shadow-2xl border border-gray-100 px-6 py-3 gap-2 pointer-events-auto relative">
+                <div className="relative flex-1">
+                  <TransliterateInput
+                    type="text"
+                    placeholder={isListening ? t('listening') : t('ask_about_pmay_scheme')}
+                    value={input}
+                    onChange={handleInputChange}
+                    lang={selectedLanguage}
+                    className={`w-full bg-transparent border-none outline-none text-gray-700 text-lg placeholder:text-gray-400 px-2 pr-12 ${isListening ? 'ring-2 ring-blue-400' : ''}`}
+                    disabled={isLoading}
+                    aria-label="Chat input"
+                  />
+                  {/* Mic button inside input */}
+                  <button
+                    type="button"
+                    onClick={isListening ? handleStopListening : handleStartListening}
+                    aria-label={isListening ? t('stop_listening') : t('start_speech_to_text')}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none border border-gray-200 shadow ${isListening ? 'bg-blue-100 text-blue-600 animate-pulse' : 'bg-white text-gray-500 hover:bg-blue-50'}`}
+                    disabled={isLoading || !isSpeechSupported}
+                    title={isSpeechSupported ? (isListening ? t('stop_listening') : t('speak')) : t('speech_recognition_not_supported')}
+                  >
+                    {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </button>
+                </div>
                 {/* Send or Stop Button (toggle) */}
                 {isLoading || isAssistantStreaming ? (
                   <button
                     type="button"
                     onClick={handleStopResponse}
-                    aria-label="Stop response"
+                    aria-label={t('stop_response')}
                     className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none"
                   >
                     <span className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 hover:bg-blue-200 transition">
@@ -551,7 +666,7 @@ export default function ChatPage() {
                     type="submit"
                     className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none"
                     disabled={!input.trim()}
-                    aria-label="Send message"
+                    aria-label={t('send_message')}
                   >
                     <span className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 hover:bg-blue-200 transition">
                       <svg width="24" height="24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
@@ -563,7 +678,7 @@ export default function ChatPage() {
                   type="button"
                   onClick={handleRegenerate}
                   disabled={isLoading || !lastUserMessage}
-                  aria-label="Regenerate response"
+                  aria-label={t('regenerate_response')}
                   className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full transition disabled:opacity-50 focus:outline-none"
                 >
                   <span className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 hover:bg-blue-200 transition">
