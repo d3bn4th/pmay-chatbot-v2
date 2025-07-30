@@ -28,6 +28,13 @@ A  Retrieval-Augmented Generation (RAG) chatbot for the Ministry of Housing and 
   <p><em>High-level architecture of the PMAY Chatbot system</em></p>
 </div>
 
+## 🗺️ Flow Diagram
+
+<div align="center">
+  <img src="docs/images/flow-diagram.png" alt="Flow Diagram" width="700"/>
+  <p><em>Flow Diagram: User to Frontend to Backend, with interactions to Redis, ChromaDB, Ollama, and TTS Models</em></p>
+</div>
+
 ---
 
 ## 🌟 Features

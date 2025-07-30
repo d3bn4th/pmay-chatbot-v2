@@ -20,18 +20,22 @@ interface ModelSelectorProps {
 }
 
 export function ModelSelector({ selectedModel, onModelChange, t }: ModelSelectorProps) {
-  // Handler to change model and reload page
+  // Handler to change model without reloading page
   const handleModelChange = (model: string) => {
     onModelChange(model);
-    window.location.reload();
+    // Save to localStorage for persistence
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pmay_selected_model', model);
+    }
   };
+  
   return (
     <div className="space-y-2">
       <div className="flex items-center text-sm sm:text-base font-medium text-white">
         <Cpu className="mr-2 h-4 w-4" />
         {t('ai_model')}
       </div>
-      <div className="text-xs text-yellow-300 mb-1">Changing the model will reload the page.</div>
+      <div className="text-xs text-yellow-300 mb-1">Model selection is automatically saved.</div>
       <Select value={selectedModel} onValueChange={handleModelChange}>
         <SelectTrigger className="w-full h-24 py-6 bg-blue-700 border-blue-600 text-white hover:bg-blue-600 text-sm sm:text-base">
           <SelectValue placeholder={t('select_model')}>

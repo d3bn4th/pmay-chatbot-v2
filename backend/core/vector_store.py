@@ -7,7 +7,7 @@ from cachetools import LRUCache, cached
 import json
 
 # Singleton ChromaDB client, embedding function, and collection
-_chroma_client = chromadb.PersistentClient(path="./demo-rag-chroma")
+_chroma_client = chromadb.PersistentClient(path="./chroma-db")
 _ollama_ef = OllamaEmbeddingFunction(
     url="http://localhost:11434/api/embeddings",
     model_name="nomic-embed-text:latest",

@@ -85,6 +85,16 @@ export default function ChatPage() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [lastUserMessage, setLastUserMessage] = useState<ChatMessageType | null>(null);
   const [selectedModel, setSelectedModel] = useState("llama3.2:1b");
+  
+  // Load persisted model from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const persistedModel = localStorage.getItem('pmay_selected_model');
+      if (persistedModel) {
+        setSelectedModel(persistedModel);
+      }
+    }
+  }, []);
   const [isListening, setIsListening] = useState(false);
   // Use a ref to store the SpeechRecognition constructor
   const SpeechRecognitionCtor = useRef<unknown>(null);

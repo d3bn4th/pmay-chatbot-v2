@@ -19,9 +19,9 @@ def extract_faqs_from_markdown(md_path):
         print(f"Warning: File not found at {md_path}. Skipping.")
         return []
 
-    # Regex to match questions: lines like '# 1. What is PMAY?' or '## 1. PMAY क्या है?'
-    # and capture the question and its answer (until the next question or end of file)
-    pattern = re.compile(r'^#+ (\d+)\. (.+?)\n(.*?)(?=^#+ (\d+)\. |\Z)', re.DOTALL | re.MULTILINE)
+    # Regex to match only top-level questions: lines like '# 1. What is PMAY?'
+    # and capture the question and its answer (until the next top-level question or end of file)
+    pattern = re.compile(r'^# (\d+)\. (.+?)\n(.*?)(?=^# (\d+)\. |\Z)', re.DOTALL | re.MULTILINE)
     faqs = []
     for match in pattern.finditer(content):
         qnum = match.group(1)

@@ -75,6 +75,7 @@ export const translations = {
     tts_playback_error: "Error occurred during TTS playback",
     tts_error: "TTS error",
     stop_speaking: "Stop speaking",
+    stop_processing: "Stop processing",
     read_aloud: "Read aloud",
     // language-selector.tsx
     language: "Language",
@@ -166,6 +167,7 @@ export const translations = {
     tts_playback_error: "टीटीएस प्लेबैक के दौरान त्रुटि हुई",
     tts_error: "टीटीएस त्रुटि",
     stop_speaking: "बोलना बंद करो",
+    stop_processing: "प्रसंस्करण बंद करो",
     read_aloud: "जोर से पढ़ें",
     // language-selector.tsx
     language: "भाषा",

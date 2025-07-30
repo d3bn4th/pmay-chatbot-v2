@@ -315,7 +315,6 @@ Assistant: Please provide a clear and concise response. Use only these formattin
 - Use **bold** for emphasis
 - Use bullet points (-) for lists
 - Use regular text for paragraphs
-- Do not use numbered lists, code blocks, or tables
 - Keep formatting simple and consistent
 
 Response:"""

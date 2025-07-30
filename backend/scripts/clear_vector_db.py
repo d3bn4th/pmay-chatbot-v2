@@ -3,7 +3,7 @@ from chromadb.utils.embedding_functions.ollama_embedding_function import OllamaE
 import os
 
 # Path to the persistent ChromaDB directory (should match your app config)
-PERSIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'demo-rag-chroma')
+PERSIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'chroma-db')
 COLLECTION_NAME = "rag_app"
 
 # Initialize ChromaDB client
